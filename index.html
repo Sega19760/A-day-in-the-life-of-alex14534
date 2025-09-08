@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3D Shooter Fixed Controls</title>
+<title>3D Shooter 3rd Person Fixed</title>
 <style>
 html,body{height:100%;margin:0;background:#000;overflow:hidden}
 #container{width:100%;height:100%;position:relative}
@@ -36,12 +36,9 @@ const container = document.getElementById('container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0a);
 
-// Camera holder
-const cameraHolder = new THREE.Object3D();
-scene.add(cameraHolder);
+// Camera
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
 camera.position.set(0,0.7,0);
-cameraHolder.add(camera);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
@@ -63,13 +60,25 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshSt
 ground.rotation.x=-Math.PI/2; scene.add(ground);
 
 // Player
-const player = {pos:new THREE.Vector3(0,0.5,0),velocity:new THREE.Vector3(),speed:4,yaw:0,pitch:0,hp:1,alive:true,thirdPerson:false,weapon:1,jumpSpeed:5,canJump:true};
+const player = {
+  pos:new THREE.Vector3(0,0.5,0),
+  velocity:new THREE.Vector3(),
+  speed:4,
+  yaw:0,
+  pitch:0,
+  hp:1,
+  alive:true,
+  thirdPerson:false,
+  weapon:1,
+  jumpSpeed:5,
+  canJump:true
+};
 
 // Player cube
 const alexMesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x6699ff}));
 scene.add(alexMesh);
 
-// Gun
+// Gun (first-person only)
 const gun = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,0.8), new THREE.MeshStandardMaterial({color:0xffff00}));
 camera.add(gun); gun.position.set(0,-0.1,-0.5);
 
@@ -110,14 +119,20 @@ const bullets=[];
 function shoot(){
   if(!player.alive) return;
   const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  let origin;
+  if(player.thirdPerson){
+    origin = player.pos.clone().add(new THREE.Vector3(0,0.7,0)); // shoot from head
+  } else {
+    origin = camera.getWorldPosition(new THREE.Vector3()); // shoot from camera
+  }
   if(player.weapon===1){
     const bullet=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,8),new THREE.MeshStandardMaterial({color:0xffff00}));
-    bullet.position.copy(camera.getWorldPosition(new THREE.Vector3()));
+    bullet.position.copy(origin);
     bullet.userData={dir:dir.clone().normalize(),speed:12,weapon:1};
     scene.add(bullet); bullets.push(bullet);
   } else {
     const rpg=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8),new THREE.MeshStandardMaterial({color:0xffaa00}));
-    rpg.position.copy(camera.getWorldPosition(new THREE.Vector3()));
+    rpg.position.copy(origin);
     rpg.userData={dir:dir.clone().normalize(),speed:8,weapon:2};
     scene.add(rpg); bullets.push(rpg);
   }
@@ -141,7 +156,6 @@ document.getElementById('retry').addEventListener('click', ()=>{
 
 // Update player
 function updatePlayer(dt){
-  // Fixed forward/backward controls
   const forward = new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   const right = new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let move=new THREE.Vector3();
@@ -158,29 +172,36 @@ function updatePlayer(dt){
   player.pos.add(player.velocity.clone().multiplyScalar(dt));
   if(player.pos.y<=0.5){player.pos.y=0.5; player.velocity.y=0; player.canJump=true;}
 
-  // Camera
+  // Third-person camera like Minecraft
   if(player.thirdPerson){
     alexMesh.visible = true;
-    const offset = new THREE.Vector3(Math.sin(player.yaw)*-5,3,Math.cos(player.yaw)*-5);
-    cameraHolder.position.copy(player.pos.clone().add(offset));
-    camera.lookAt(player.pos.clone().add(new THREE.Vector3(0,0.5,0)));
+    const distance = 5; 
+    const phi = Math.PI/2 + player.pitch; // vertical angle
+    const theta = player.yaw;             // horizontal angle
+
+    const camX = player.pos.x + distance * Math.sin(phi) * Math.sin(theta);
+    const camY = player.pos.y + distance * Math.cos(phi);
+    const camZ = player.pos.z + distance * Math.sin(phi) * Math.cos(theta);
+
+    camera.position.set(camX, camY, camZ);
+    camera.lookAt(player.pos.x, player.pos.y + 0.7, player.pos.z);
   } else {
     alexMesh.visible = false;
-    cameraHolder.position.copy(player.pos);
-    camera.position.set(0,0.7,0);
+    camera.position.copy(player.pos.clone().add(new THREE.Vector3(0,0.7,0)));
     camera.rotation.set(player.pitch,player.yaw,0,'YXZ');
   }
+
   alexMesh.position.copy(player.pos);
   alexMesh.rotation.y = player.yaw;
 }
 
-// Update bullets & enemies remain the same
+// Bullets & enemies
 function updateBullets(dt){
   for(let i=bullets.length-1;i>=0;i--){
     const b=bullets[i];
     b.position.add(b.userData.dir.clone().multiplyScalar(b.userData.speed*dt));
     for(let j=enemies.length-1;j>=0;j--){
-      const e = enemies[j];
+      const e=enemies[j];
       const dist = b.position.distanceTo(e.position);
       if(dist<0.6 || (b.userData.weapon===2 && dist<1.5)){
         e.userData.hp--;
@@ -212,7 +233,7 @@ function updateEnemies(dt){
 let lastSpawn=performance.now(); let SPAWN_INTERVAL=2500;
 function gameTick(now){
   const dt=Math.min(0.05,(now-(gameTick.last||now))/1000); gameTick.last=now;
-  if(now-lastSpawn>SPAWN_INTERVAL){lastSpawn=now; spawnEnemy(); updateHUD(); if(SPAWN_INTERVAL>500) SPAWN_INTERVAL *=0.97;}
+  if(now-lastSpawn>SPAWN_INTERVAL){lastSpawn=now; spawnEnemy(); updateHUD(); if(SPAWN_INTERVAL>500) SPAWN_INTERVAL*=0.97;}
   if(player.alive){updatePlayer(dt); updateBullets(dt); updateEnemies(dt);}
   renderer.render(scene,camera);
   requestAnimationFrame(gameTick);
