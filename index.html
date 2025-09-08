@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3D Shooter 3rd Person Multiplayer</title>
+<title>3D Shooter 3rd Person Fixed — Multiplayer</title>
 <style>
 html,body{height:100%;margin:0;background:#000;overflow:hidden}
 #container{width:100%;height:100%;position:relative}
@@ -18,7 +18,7 @@ canvas{display:block}
 #gameOver{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:30px;padding:20px;background:rgba(0,0,0,0.8);display:none;text-align:center;z-index:10;}
 #retry{margin-top:10px;font-size:20px;padding:5px 10px;cursor:pointer;}
 #gameOver img{width:200px;margin-top:10px;}
-#multiplayerBtn{position:absolute;top:140px;left:10px;z-index:6;padding:5px 10px;cursor:pointer;}
+#multiplayerBtn{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 20px;font-size:16px;cursor:pointer;z-index:7;background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:6px;}
 </style>
 </head>
 <body>
@@ -34,26 +34,46 @@ canvas{display:block}
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
 
-// ==== Scene & Camera ====
-const container = document.getElementById('container');
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0a0a);
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000); camera.position.set(0,0.7,0);
-const renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth, innerHeight); container.appendChild(renderer.domElement);
-window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});
+const container=document.getElementById('container');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a0a0a);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,1000);
+camera.position.set(0,0.7,0);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight); container.appendChild(renderer.domElement);
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
-// ==== Lights & Ground ====
+// Lights
 scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
-const dir = new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(-10,10,5); scene.add(dir);
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x1e1e1e}));
+const dir=new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(-10,10,5); scene.add(dir);
+
+// Ground
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:0x1e1e1e}));
 ground.rotation.x=-Math.PI/2; scene.add(ground);
 
-// ==== Player ====
-const player={pos:new THREE.Vector3(0,0.5,0),velocity:new THREE.Vector3(),speed:4,yaw:0,pitch:0,hp:1,alive:true,thirdPerson:false,weapon:1,jumpSpeed:5,canJump:true};
-const alexMesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x6699ff})); scene.add(alexMesh);
-const gun = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,0.8), new THREE.MeshStandardMaterial({color:0xffff00}));
+// Player
+const player={
+  pos:new THREE.Vector3(0,0.5,0),
+  velocity:new THREE.Vector3(),
+  speed:4,
+  yaw:0,
+  pitch:0,
+  hp:1,
+  alive:true,
+  thirdPerson:false,
+  weapon:1,
+  jumpSpeed:5,
+  canJump:true
+};
+
+// Player mesh
+const alexMesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0x6699ff}));
+scene.add(alexMesh);
+
+// Gun (first-person)
+const gun=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,0.8),new THREE.MeshStandardMaterial({color:0xffff00}));
 camera.add(gun); gun.position.set(0,-0.1,-0.5);
 
-// ==== Controls ====
+// Controls
 let keys={};
 window.addEventListener('keydown', e=>{
   keys[e.code]=true;
@@ -63,91 +83,140 @@ window.addEventListener('keydown', e=>{
 });
 window.addEventListener('keyup', e=>keys[e.code]=false);
 window.addEventListener('keydown', e=>{if(e.code==='Escape') document.exitPointerLock?.();});
-window.addEventListener('keydown', e=>{if(e.code==='Space' && player.canJump){player.velocity.y=player.jumpSpeed;player.canJump=false;}});
+window.addEventListener('keydown', e=>{
+  if(e.code==='Space' && player.canJump){player.velocity.y=player.jumpSpeed;player.canJump=false;}
+});
+
+// Mouse look
 let isLocked=false;
 renderer.domElement.addEventListener('click',()=>{renderer.domElement.requestPointerLock?.();});
 document.addEventListener('pointerlockchange',()=>{isLocked=(document.pointerLockElement===renderer.domElement);});
 document.addEventListener('mousemove', e=>{
   if(!isLocked) return;
-  player.yaw -= e.movementX*0.002;
-  player.pitch -= e.movementY*0.002;
+  player.yaw-=e.movementX*0.002;
+  player.pitch-=e.movementY*0.002;
   player.pitch=Math.max(-Math.PI/2+0.1,Math.min(Math.PI/2-0.1,player.pitch));
 });
 
-// ==== Enemies & Bullets ====
-const ooferTemplate = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0xff5555}));
+// Enemies
+const ooferTemplate=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0xff5555}));
 const enemies=[]; const enemyGroup=new THREE.Group(); scene.add(enemyGroup);
-function spawnEnemy(){const clone=ooferTemplate.clone(); const angle=Math.random()*Math.PI*2; const dist=10+Math.random()*10; clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist); clone.userData={hp:2}; enemyGroup.add(clone); enemies.push(clone);}
+function spawnEnemy(){const clone=ooferTemplate.clone();const angle=Math.random()*Math.PI*2;const dist=10+Math.random()*10; clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist); clone.userData={hp:2}; enemyGroup.add(clone); enemies.push(clone);}
+
+// Bullets
 const bullets=[];
 function shoot(){
   if(!player.alive) return;
   const dir=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-  const origin = player.thirdPerson ? player.pos.clone().add(new THREE.Vector3(0,0.7,0)) : camera.getWorldPosition(new THREE.Vector3());
-  const bullet = new THREE.Mesh(new THREE.SphereGeometry(player.weapon===1?0.1:0.3,8,8), new THREE.MeshStandardMaterial({color:player.weapon===1?0xffff00:0xffaa00}));
-  bullet.position.copy(origin);
-  bullet.userData={dir:dir.clone().normalize(),speed:player.weapon===1?12:8,weapon:player.weapon};
-  scene.add(bullet); bullets.push(bullet);
+  let origin=player.thirdPerson ? player.pos.clone().add(new THREE.Vector3(0,0.7,0)) : camera.getWorldPosition(new THREE.Vector3());
+  if(player.weapon===1){
+    const bullet=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,8),new THREE.MeshStandardMaterial({color:0xffff00}));
+    bullet.position.copy(origin); bullet.userData={dir:dir.clone().normalize(),speed:12,weapon:1}; scene.add(bullet); bullets.push(bullet);
+  } else {
+    const rpg=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8),new THREE.MeshStandardMaterial({color:0xffaa00}));
+    rpg.position.copy(origin); rpg.userData={dir:dir.clone().normalize(),speed:8,weapon:2}; scene.add(rpg); bullets.push(rpg);
+  }
 }
 window.addEventListener('mousedown', e=>{if(e.button===0) shoot();});
 
-// ==== HUD ====
+// HUD
 const hud=document.getElementById('hud'); const playersDiv=document.getElementById('players'); let score=0;
 function updateHUD(){hud.textContent=`Score: ${score} | Enemies: ${enemies.length} | HP: ${player.hp}`;}
 function updatePlayers(){playersDiv.textContent=`Players: me`;}
-
-// ==== Game Over ====
 const gameOverDiv=document.getElementById('gameOver');
 document.getElementById('retry').addEventListener('click', ()=>{
-  player.hp=1; player.alive=true; player.pos.set(0,0.5,0); player.velocity.set(0,0,0); gameOverDiv.style.display='none'; updateHUD();
+  player.hp=1; player.alive=true; player.pos.set(0,0.5,0); player.velocity.set(0,0,0);
+  gameOverDiv.style.display='none'; updateHUD();
 });
 
-// ==== Multiplayer P2P ====
-const peers={}; let localId=crypto.randomUUID(); let isMultiplayer=false;
-const signaling = new WebSocket('ws://localhost:8080'); // setup your signaling server
-signaling.onmessage = async msg => {
-  const data=JSON.parse(msg.data);
-  if(data.type==='offer' && data.to===localId){ /* handle offer */ }
-  if(data.type==='answer' && data.to===localId){ /* handle answer */ }
-  if(data.type==='ice' && data.to===localId){ /* handle ICE */ }
-};
-document.getElementById('multiplayerBtn').onclick = ()=>{
-  if(isMultiplayer) return; isMultiplayer=true;
-  signaling.send(JSON.stringify({type:'join',id:localId,name:'Player'}));
-};
+// Multiplayer
+let multiplayer=false; let ws; let peers={}; let remotePlayers={};
+const btn=document.getElementById('multiplayerBtn');
+btn.addEventListener('click', ()=>{
+  if(multiplayer) return;
+  multiplayer=true; btn.style.display='none';
+  const myId=Math.random().toString(36).substr(2,9);
+  ws=new WebSocket('ws://localhost:8080');
+  ws.onopen=()=>ws.send(JSON.stringify({type:'join',id:myId}));
 
-// ==== Game Logic ====
-let lastSpawn=performance.now(); let SPAWN_INTERVAL=2500;
+  ws.onmessage=async (msg)=>{
+    const data=JSON.parse(msg.data);
+    if(data.type==='new-player'){
+      const remoteId=data.id; if(peers[remoteId]) return;
+      const pc=new RTCPeerConnection();
+      const dc=pc.createDataChannel('pos');
+      setInterval(()=>{if(dc.readyState==='open') dc.send(JSON.stringify({x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw}));},50);
+      dc.onmessage=event=>{const p=JSON.parse(event.data); remotePlayers[remoteId].pos.set(p.x,p.y,p.z); remotePlayers[remoteId].yaw=p.yaw;};
+      pc.onicecandidate=e=>{if(e.candidate) ws.send(JSON.stringify({type:'ice',candidate:e.candidate,to:remoteId}));};
+      peers[remoteId]=pc; remotePlayers[remoteId]={mesh:alexMesh.clone(),pos:new THREE.Vector3(),yaw:0}; scene.add(remotePlayers[remoteId].mesh);
+      const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+      ws.send(JSON.stringify({type:'offer',sdp:offer,to:remoteId,from:myId}));
+    }
+    if(data.type==='offer'){
+      const pc=new RTCPeerConnection();
+      pc.ondatachannel=event=>{
+        const dc=event.channel;
+        setInterval(()=>{if(dc.readyState==='open') dc.send(JSON.stringify({x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw}));},50);
+        dc.onmessage=event=>{const p=JSON.parse(event.data); remotePlayers[data.from].pos.set(p.x,p.y,p.z); remotePlayers[data.from].yaw=p.yaw;};
+      };
+      await pc.setRemoteDescription(data.sdp);
+      const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
+      ws.send(JSON.stringify({type:'answer',sdp:answer,to:data.from,from:myId}));
+      peers[data.from]=pc; remotePlayers[data.from]={mesh:alexMesh.clone(),pos:new THREE.Vector3(),yaw:0}; scene.add(remotePlayers[data.from].mesh);
+    }
+    if(data.type==='answer'){await peers[data.from].setRemoteDescription(data.sdp);}
+    if(data.type==='ice'){await peers[data.from].addIceCandidate(data.candidate);}
+    if(data.type==='remove-player'){scene.remove(remotePlayers[data.id].mesh); delete peers[data.id]; delete remotePlayers[data.id];}
+  };
+});
+
+// Update
 function updatePlayer(dt){
-  const forward = new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
-  const right = new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+  const forward=new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+  const right=new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let move=new THREE.Vector3();
-  if(keys['KeyW']) move.add(forward); if(keys['KeyS']) move.sub(forward);
-  if(keys['KeyA']) move.sub(right); if(keys['KeyD']) move.add(right);
+  if(keys['KeyW']) move.add(forward);
+  if(keys['KeyS']) move.sub(forward);
+  if(keys['KeyA']) move.sub(right);
+  if(keys['KeyD']) move.add(right);
   if(move.lengthSq()>0) move.normalize();
   player.velocity.x=move.x*player.speed; player.velocity.z=move.z*player.speed;
+
+  // Gravity
   player.velocity.y-=9.8*dt;
   player.pos.add(player.velocity.clone().multiplyScalar(dt));
   if(player.pos.y<=0.5){player.pos.y=0.5; player.velocity.y=0; player.canJump=true;}
 
+  // Third-person camera
   if(player.thirdPerson){
     alexMesh.visible=true;
     const distance=5; const phi=Math.PI/2+player.pitch; const theta=player.yaw;
-    const camX = player.pos.x+distance*Math.sin(phi)*Math.sin(theta);
-    const camY = player.pos.y+distance*Math.cos(phi);
-    const camZ = player.pos.z+distance*Math.sin(phi)*Math.cos(theta);
-    camera.position.set(camX,camY,camZ); camera.lookAt(player.pos.x,player.pos.y+0.7,player.pos.z);
-  } else { alexMesh.visible=false; camera.position.copy(player.pos.clone().add(new THREE.Vector3(0,0.7,0))); camera.rotation.set(player.pitch,player.yaw,0,'YXZ'); }
+    const camX=player.pos.x+distance*Math.sin(phi)*Math.sin(theta);
+    const camY=player.pos.y+distance*Math.cos(phi);
+    const camZ=player.pos.z+distance*Math.sin(phi)*Math.cos(theta);
+    camera.position.set(camX,camY,camZ);
+    camera.lookAt(player.pos.x,player.pos.y+0.7,player.pos.z);
+  } else {
+    alexMesh.visible=false;
+    camera.position.copy(player.pos.clone().add(new THREE.Vector3(0,0.7,0)));
+    camera.rotation.set(player.pitch,player.yaw,0,'YXZ');
+  }
   alexMesh.position.copy(player.pos); alexMesh.rotation.y=player.yaw;
 }
 
+// Bullets & enemies
 function updateBullets(dt){
   for(let i=bullets.length-1;i>=0;i--){
     const b=bullets[i]; b.position.add(b.userData.dir.clone().multiplyScalar(b.userData.speed*dt));
     for(let j=enemies.length-1;j>=0;j--){
       const e=enemies[j]; const dist=b.position.distanceTo(e.position);
       if(dist<0.6||(b.userData.weapon===2&&dist<1.5)){
-        e.userData.hp--; if(e.userData.hp<=0){enemyGroup.remove(e);enemies.splice(j,1);score+=10;updateHUD();}
-        scene.remove(b); bullets.splice(i,1); break;
+        e.userData.hp--; if(e.userData.hp<=0){enemyGroup.remove(e); enemies.splice(j,1); score+=10; updateHUD();}
+        if(b.userData.weapon===1){scene.remove(b); bullets.splice(i,1); break;}
+        if(b.userData.weapon===2){
+          for(let k=enemies.length-1;k>=0;k--){const e2=enemies[k]; if(e2.position.distanceTo(b.position)<1.5){e2.userData.hp--; if(e2.userData.hp<=0){enemyGroup.remove(e2);enemies.splice(k,1);score+=10;updateHUD();}}}
+          scene.remove(b); bullets.splice(i,1); break;
+        }
       }
     }
   }
@@ -161,11 +230,20 @@ function updateEnemies(dt){
   }
 }
 
+// Spawn timer
+let lastSpawn=performance.now(); let SPAWN_INTERVAL=2500;
 function gameTick(now){
   const dt=Math.min(0.05,(now-(gameTick.last||now))/1000); gameTick.last=now;
   if(now-lastSpawn>SPAWN_INTERVAL){lastSpawn=now; spawnEnemy(); updateHUD(); if(SPAWN_INTERVAL>500) SPAWN_INTERVAL*=0.97;}
   if(player.alive){updatePlayer(dt); updateBullets(dt); updateEnemies(dt);}
-  renderer.render(scene,camera); requestAnimationFrame(gameTick);
+  // Update remote players meshes
+  for(const id in remotePlayers){
+    const p=remotePlayers[id];
+    p.mesh.position.copy(p.pos);
+    p.mesh.rotation.y=p.yaw;
+  }
+  renderer.render(scene,camera);
+  requestAnimationFrame(gameTick);
 }
 
 updatePlayers(); updateHUD(); requestAnimationFrame(gameTick);
