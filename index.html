@@ -120,26 +120,38 @@ document.getElementById('retry').addEventListener('click', ()=>{
   gameOverDiv.style.display='none'; updateHUD();
 });
 
-// updates
 function updatePlayer(dt){
-  const forward=new THREE.Vector3(Math.sin(player.yaw),0,Math.cos(player.yaw));
-  const right=new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
-  let move=new THREE.Vector3();
+  // Camera directions
+  const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  const up = new THREE.Vector3(0,1,0);
+
+  // Movement
+  let move = new THREE.Vector3();
   if(keys['KeyW']) move.add(forward);
   if(keys['KeyS']) move.sub(forward);
   if(keys['KeyA']) move.sub(right);
   if(keys['KeyD']) move.add(right);
+  if(keys['Space']) move.add(up);
+  if(keys['ShiftLeft']) move.sub(up); // optional fly
   if(move.lengthSq()>0) move.normalize();
   player.velocity.copy(move.multiplyScalar(player.speed));
   player.pos.add(player.velocity.clone().multiplyScalar(dt));
 
+  // Rotate the player cube to face the camera yaw
+  alexMesh.position.copy(player.pos.clone().add(new THREE.Vector3(0,-0.8,0)));
+  alexMesh.rotation.y = player.yaw; // now the cube faces forward
+
+  // Camera position
   if(player.thirdPerson){
-    camera.position.copy(player.pos.clone().add(new THREE.Vector3(Math.sin(player.yaw)*-3,2,Math.cos(player.yaw)*-3)));
+    const offset = new THREE.Vector3(Math.sin(player.yaw)*-3,2,Math.cos(player.yaw)*-3);
+    camera.position.copy(player.pos.clone().add(offset));
     camera.lookAt(player.pos);
   } else {
     camera.position.copy(player.pos);
-    camera.rotation.set(player.pitch,player.yaw,0,'YXZ');
+    camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
   }
+}
 
   alexMesh.position.copy(player.pos.clone().add(new THREE.Vector3(0,-0.8,0)));
 }
