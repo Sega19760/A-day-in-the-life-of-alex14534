@@ -111,18 +111,30 @@ const enemies = [];
 const objLoader = new OBJLoader();
 const mtlLoader = new MTLLoader();
 
-function spawnEnemy() {
+function spawnEnemy(){
+  // Fallback cube
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0xff5555}));
+  const angle = Math.random()*Math.PI*2;
+  const dist = 10 + Math.random()*10;
+  cube.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist);
+  cube.userData = { hp: 2 };
+  enemyGroup.add(cube);
+  enemies.push(cube);
+
+  // Load OOFER model
   mtlLoader.load('models/oofer.mtl', materials=>{
     materials.preload();
     objLoader.setMaterials(materials);
     objLoader.load('models/oofer.obj', obj=>{
-      obj.scale.set(1,1,1); 
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 10 + Math.random() * 10;
-      obj.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist);
-      obj.userData = { hp: 2 };
+      obj.scale.set(1,1,1);
+      obj.position.copy(cube.position);
+      obj.userData = cube.userData;
       enemyGroup.add(obj);
       enemies.push(obj);
+      // Remove fallback cube
+      enemyGroup.remove(cube);
+      const index = enemies.indexOf(cube);
+      if(index>-1) enemies.splice(index,1);
     });
   });
 }
