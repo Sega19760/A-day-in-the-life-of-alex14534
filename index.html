@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3D Shooter Fixed Controls</title>
+<title>3D Shooter - OOFER</title>
 <style>
 html,body{height:100%;margin:0;background:#000;overflow:hidden}
 #container{width:100%;height:100%;position:relative}
@@ -31,6 +31,8 @@ canvas{display:block}
 
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
+import { MTLLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/MTLLoader.js';
+import { OBJLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/OBJLoader.js';
 
 const container = document.getElementById('container');
 const scene = new THREE.Scene();
@@ -100,10 +102,30 @@ document.addEventListener('mousemove', e=>{
   player.pitch=Math.max(-Math.PI/2+0.1,Math.min(Math.PI/2-0.1,player.pitch));
 });
 
-// Enemies
-const ooferTemplate = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0xff5555}));
-const enemies=[]; const enemyGroup=new THREE.Group(); scene.add(enemyGroup);
-function spawnEnemy(){const clone = ooferTemplate.clone(); const angle = Math.random()*Math.PI*2; const dist = 10+Math.random()*10; clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist); clone.userData={hp:2}; enemyGroup.add(clone); enemies.push(clone);}
+// Enemy group
+const enemyGroup = new THREE.Group();
+scene.add(enemyGroup);
+const enemies = [];
+
+// Load OOFER model
+const objLoader = new OBJLoader();
+const mtlLoader = new MTLLoader();
+
+function spawnEnemy() {
+  mtlLoader.load('models/oofer.mtl', materials=>{
+    materials.preload();
+    objLoader.setMaterials(materials);
+    objLoader.load('models/oofer.obj', obj=>{
+      obj.scale.set(1,1,1); 
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 10 + Math.random() * 10;
+      obj.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist);
+      obj.userData = { hp: 2 };
+      enemyGroup.add(obj);
+      enemies.push(obj);
+    });
+  });
+}
 
 // Bullets
 const bullets=[];
@@ -141,7 +163,6 @@ document.getElementById('retry').addEventListener('click', ()=>{
 
 // Update player
 function updatePlayer(dt){
-  // Fixed forward/backward controls
   const forward = new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   const right = new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let move=new THREE.Vector3();
@@ -153,28 +174,34 @@ function updatePlayer(dt){
   player.velocity.x = move.x*player.speed;
   player.velocity.z = move.z*player.speed;
 
-  // Gravity
+  // Gravity & jump
   player.velocity.y -= 9.8*dt;
   player.pos.add(player.velocity.clone().multiplyScalar(dt));
-  if(player.pos.y<=0.5){player.pos.y=0.5; player.velocity.y=0; player.canJump=true;}
+  if(player.pos.y <= 0.5){player.pos.y = 0.5; player.velocity.y=0; player.canJump=true;}
+
+  alexMesh.position.copy(player.pos);
+  alexMesh.rotation.y = player.yaw;
 
   // Camera
   if(player.thirdPerson){
     alexMesh.visible = true;
-    const offset = new THREE.Vector3(Math.sin(player.yaw)*-5,3,Math.cos(player.yaw)*-5);
-    cameraHolder.position.copy(player.pos.clone().add(offset));
-    camera.lookAt(player.pos.clone().add(new THREE.Vector3(0,0.5,0)));
+    const offset = new THREE.Vector3(0,3,5);
+    const rotatedOffset = new THREE.Vector3(
+      Math.sin(player.yaw) * offset.z,
+      offset.y,
+      Math.cos(player.yaw) * offset.z
+    );
+    cameraHolder.position.copy(player.pos.clone().add(rotatedOffset));
+    camera.lookAt(player.pos.clone().add(new THREE.Vector3(0,1,0)));
   } else {
     alexMesh.visible = false;
     cameraHolder.position.copy(player.pos);
     camera.position.set(0,0.7,0);
     camera.rotation.set(player.pitch,player.yaw,0,'YXZ');
   }
-  alexMesh.position.copy(player.pos);
-  alexMesh.rotation.y = player.yaw;
 }
 
-// Update bullets & enemies remain the same
+// Update bullets
 function updateBullets(dt){
   for(let i=bullets.length-1;i>=0;i--){
     const b=bullets[i];
@@ -198,6 +225,7 @@ function updateBullets(dt){
   }
 }
 
+// Update enemies
 function updateEnemies(dt){
   for(let i=enemies.length-1;i>=0;i--){
     const e = enemies[i];
@@ -212,7 +240,7 @@ function updateEnemies(dt){
 let lastSpawn=performance.now(); let SPAWN_INTERVAL=2500;
 function gameTick(now){
   const dt=Math.min(0.05,(now-(gameTick.last||now))/1000); gameTick.last=now;
-  if(now-lastSpawn>SPAWN_INTERVAL){lastSpawn=now; spawnEnemy(); updateHUD(); if(SPAWN_INTERVAL>500) SPAWN_INTERVAL *=0.97;}
+  if(now-lastSpawn>SPAWN_INTERVAL){lastSpawn=now; spawnEnemy(); updateHUD(); if(SPAWN_INTERVAL>500) SPAWN_INTERVAL*=0.97;}
   if(player.alive){updatePlayer(dt); updateBullets(dt); updateEnemies(dt);}
   renderer.render(scene,camera);
   requestAnimationFrame(gameTick);
@@ -222,3 +250,4 @@ updatePlayers(); updateHUD(); requestAnimationFrame(gameTick);
 </script>
 </body>
 </html>
+
