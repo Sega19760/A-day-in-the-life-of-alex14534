@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Discord Activity — 3D Shooter Enhanced</title>
+<title>Discord Activity — 3D Shooter Full</title>
 <style>
 html,body{height:100%;margin:0;background:#000;overflow:hidden}
 #container{width:100%;height:100%;position:relative}
@@ -23,7 +23,7 @@ canvas{display:block}
 <div id="container">
   <div class="hud" id="hud">Score: 0 | Enemies: 0</div>
   <div class="players" id="players">Players:</div>
-  <div class="instructions">WASD - move • Mouse - look • Click - shoot • Y - toggle view • Esc: release mouse • 1 2: switch weapon</div>
+  <div class="instructions">WASD - move • Mouse - look • Click - shoot • Space: jump • Y - toggle view • Esc: release mouse • 1 2: switch weapon</div>
   <div class="crosshair"></div>
   <div id="gameOver">Game Over<br><button id="retry">Retry</button></div>
 </div>
@@ -35,7 +35,7 @@ const container = document.getElementById('container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0a);
 
-// Camera holder for proper rotation
+// Camera holder for rotation
 const cameraHolder = new THREE.Object3D();
 scene.add(cameraHolder);
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
@@ -62,7 +62,19 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshSt
 ground.rotation.x=-Math.PI/2; scene.add(ground);
 
 // Player
-const player = {pos:new THREE.Vector3(0,0.5,0), velocity:new THREE.Vector3(), speed:4, yaw:0, pitch:0, hp:1, alive:true, thirdPerson:false, weapon:1};
+const player = {
+  pos:new THREE.Vector3(0,0.5,0),
+  velocity:new THREE.Vector3(),
+  speed:4,
+  yaw:0,
+  pitch:0,
+  hp:1,
+  alive:true,
+  thirdPerson:false,
+  weapon:1,
+  jumpSpeed:5,
+  canJump:true
+};
 
 // Player cube
 const alexMesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x6699ff}));
@@ -83,6 +95,14 @@ window.addEventListener('keydown', e=>{
 });
 window.addEventListener('keyup', e=>keys[e.code]=false);
 window.addEventListener('keydown', e=>{if(e.code==='Escape') document.exitPointerLock?.();});
+
+// Jump
+window.addEventListener('keydown', e=>{
+  if(e.code==='Space' && player.canJump){
+    player.velocity.y = player.jumpSpeed;
+    player.canJump = false;
+  }
+});
 
 // Mouse look
 let isLocked=false;
@@ -136,7 +156,7 @@ const hud = document.getElementById('hud');
 const playersDiv = document.getElementById('players');
 let score=0;
 function updateHUD(){hud.textContent=`Score: ${score} | Enemies: ${enemies.length} | HP: ${player.hp}`;}
-function updatePlayers(){playersDiv.textContent=`Players: me`;} // placeholder
+function updatePlayers(){playersDiv.textContent=`Players: me`;}
 
 // Game Over
 const gameOverDiv=document.getElementById('gameOver');
@@ -155,22 +175,29 @@ function updatePlayer(dt){
   if(keys['KeyA']) move.sub(right);
   if(keys['KeyD']) move.add(right);
   if(move.lengthSq()>0) move.normalize();
-  player.velocity.copy(move.multiplyScalar(player.speed));
+  player.velocity.x = move.x * player.speed;
+  player.velocity.z = move.z * player.speed;
+
+  // Gravity
+  player.velocity.y -= 9.8*dt;
   player.pos.add(player.velocity.clone().multiplyScalar(dt));
+  if(player.pos.y<=0.5){player.pos.y=0.5; player.velocity.y=0; player.canJump=true;}
 
-  alexMesh.position.copy(player.pos);
-  alexMesh.rotation.y = player.yaw;
-
-  // Third-person improved
+  // Third person camera
   if(player.thirdPerson){
+    alexMesh.visible = true;
     const offset = new THREE.Vector3(Math.sin(player.yaw)*-5,3,Math.cos(player.yaw)*-5);
     cameraHolder.position.copy(player.pos.clone().add(offset));
     camera.lookAt(player.pos.clone().add(new THREE.Vector3(0,0.5,0)));
   } else {
+    alexMesh.visible = false; // hide player in first person
     cameraHolder.position.copy(player.pos);
     camera.position.set(0,0.7,0);
     camera.rotation.set(player.pitch,player.yaw,0,'YXZ');
   }
+
+  alexMesh.position.copy(player.pos);
+  alexMesh.rotation.y = player.yaw;
 }
 
 // Update bullets
@@ -224,7 +251,7 @@ function gameTick(now){
   // Spawn enemies faster over time
   if(now-lastSpawn>SPAWN_INTERVAL){
     lastSpawn=now; spawnEnemy(); updateHUD();
-    if(SPAWN_INTERVAL>500) SPAWN_INTERVAL *= 0.97; // accelerate spawn rate
+    if(SPAWN_INTERVAL>500) SPAWN_INTERVAL *= 0.97;
   }
 
   if(player.alive){
@@ -232,6 +259,7 @@ function gameTick(now){
     updateBullets(dt);
     updateEnemies(dt);
   }
+
   renderer.render(scene,camera);
   requestAnimationFrame(gameTick);
 }
