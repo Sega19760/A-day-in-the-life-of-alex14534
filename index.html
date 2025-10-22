@@ -44,7 +44,7 @@
 
   <div class="instructions">
     <strong>Controls</strong><br>
-    WASD - move<br>Mouse - look<br>Click - shoot<br>Space - jump<br>Y - toggle view<br>Esc - release mouse<br>1/2 - quick swap<br>Hold Q - weapon wheel
+    WASD - move<br>Mouse - look<br>Click - shoot<br>Space - jump<br>Y - toggle view<br>Esc - release mouse<br>1-4 - quick swap weapons<br>Hold Q - weapon wheel<br>Weapons: 1 Pulse | 2 Rocket | 3 Scatter | 4 Ion Lance
   </div>
 
   <div class="crosshair"></div>
@@ -111,14 +111,91 @@ const nameInput = document.getElementById('nameInput');
 const hostIpInput = document.getElementById('hostIp');
 const weaponWheelEl = document.getElementById('weaponWheel');
 
+const weaponConfigs = [
+  {
+    id: 1,
+    label: 'Pulse Blaster',
+    desc: 'Fast, accurate shot',
+    type: 'pulse',
+    appearance: {color: 0xffff66, emissive: 0x332200, length: 0.95, thickness: 0.95},
+    poses: {
+      idle: {
+        left: {pos: [-0.32, -0.08, -0.32], rot: [-0.35, 0.25, 1.4]},
+        right: {pos: [0.22, -0.12, -0.4], rot: [-0.45, -0.05, -1.45]},
+        weapon: {pos: [0, -0.1, -0.5], rot: [-0.08, 0, 0]}
+      },
+      fire: {
+        left: {pos: [-0.3, -0.05, -0.25], rot: [-0.25, 0.4, 1.3]},
+        right: {pos: [0.25, -0.1, -0.32], rot: [-0.35, 0.05, -1.35]},
+        weapon: {pos: [0, -0.06, -0.58], rot: [-0.15, 0, 0]}
+      }
+    }
+  },
+  {
+    id: 2,
+    label: 'Burst Rocket',
+    desc: 'Slow but explosive',
+    type: 'rocket',
+    appearance: {color: 0xff5a2f, emissive: 0x401000, length: 1.35, thickness: 1.25},
+    poses: {
+      idle: {
+        left: {pos: [-0.28, -0.18, -0.24], rot: [-0.2, 0.1, 1.55]},
+        right: {pos: [0.15, -0.25, -0.34], rot: [-0.1, -0.2, -1.45]},
+        weapon: {pos: [0, -0.22, -0.58], rot: [0.1, 0.05, 0]}
+      },
+      fire: {
+        left: {pos: [-0.26, -0.16, -0.18], rot: [-0.1, 0.18, 1.4]},
+        right: {pos: [0.18, -0.22, -0.26], rot: [0.02, -0.15, -1.35]},
+        weapon: {pos: [0, -0.18, -0.72], rot: [0.18, 0.1, 0.05]}
+      }
+    }
+  },
+  {
+    id: 3,
+    label: 'Scatter Cycler',
+    desc: 'Wide pellet burst',
+    type: 'scatter',
+    appearance: {color: 0xfff1c1, emissive: 0x3a2c15, length: 1.05, thickness: 1.1},
+    poses: {
+      idle: {
+        left: {pos: [-0.34, -0.12, -0.3], rot: [-0.55, 0.28, 1.7]},
+        right: {pos: [0.2, -0.16, -0.38], rot: [-0.65, -0.12, -1.6]},
+        weapon: {pos: [0, -0.14, -0.54], rot: [-0.28, 0, 0]}
+      },
+      fire: {
+        left: {pos: [-0.32, -0.09, -0.24], rot: [-0.42, 0.4, 1.55]},
+        right: {pos: [0.22, -0.14, -0.32], rot: [-0.5, 0, -1.45]},
+        weapon: {pos: [0, -0.1, -0.64], rot: [-0.32, 0.08, 0]}
+      }
+    }
+  },
+  {
+    id: 4,
+    label: 'Ion Lance',
+    desc: 'Piercing energy beam',
+    type: 'beam',
+    appearance: {color: 0x5ad4ff, emissive: 0x0e3550, length: 1.5, thickness: 0.85},
+    poses: {
+      idle: {
+        left: {pos: [-0.18, -0.07, -0.44], rot: [-0.35, 0.05, 1.2]},
+        right: {pos: [0.08, -0.1, -0.52], rot: [-0.4, -0.04, -1.2]},
+        weapon: {pos: [0, -0.06, -0.72], rot: [-0.45, 0, 0]}
+      },
+      fire: {
+        left: {pos: [-0.16, -0.06, -0.4], rot: [-0.2, 0.12, 1.05]},
+        right: {pos: [0.1, -0.08, -0.46], rot: [-0.28, 0, -1.05]},
+        weapon: {pos: [0, -0.03, -0.82], rot: [-0.52, 0.05, 0]}
+      }
+    }
+  }
+];
+const weaponConfigById = new Map(weaponConfigs.map(cfg=>[cfg.id, cfg]));
+
 const weaponWheelState = {
   open: false,
   pointer: {x: innerWidth/2, y: innerHeight/2},
   selected: 0,
-  options: [
-    {id:1, label:'Pulse Blaster', desc:'Fast, accurate shot'},
-    {id:2, label:'Burst Rocket', desc:'Slow but explosive'}
-  ],
+  options: weaponConfigs.map(cfg=>({id:cfg.id, label:cfg.label, desc:cfg.desc})),
   optionEls: [],
   centerEl: null
 };
@@ -193,7 +270,7 @@ function closeWeaponWheel(){
   weaponWheelEl.classList.remove('open');
   const chosen = weaponWheelState.options[weaponWheelState.selected];
   if(chosen){
-    player.weapon = chosen.id;
+    equipWeapon(chosen.id);
   }
 }
 
@@ -219,6 +296,145 @@ function updateWeaponWheelSelection(){
   }
 }
 
+function equipWeapon(id, options={}){
+  const cfg = weaponConfigById.get(id);
+  if(!cfg) return;
+  if(typeof player !== 'undefined'){
+    player.weapon = id;
+  }
+  const idx = weaponWheelState.options.findIndex(opt=>opt.id===id);
+  if(idx>=0){
+    weaponWheelState.selected = idx;
+    updateWeaponWheelHighlight();
+  }
+  if(typeof armRig !== 'undefined' && armRig){
+    armRig.setWeapon(id, options.immediate);
+  }
+}
+
+function createArmRig(){
+  const group = new THREE.Group();
+  group.position.set(0, -0.12, 0.08);
+
+  const skinMaterial = new THREE.MeshStandardMaterial({color:0xffcaa6, roughness:0.55, metalness:0.1});
+  const armGeometry = new THREE.CylinderGeometry(0.09, 0.12, 0.6, 14);
+  armGeometry.translate(0, -0.3, 0);
+
+  const left = new THREE.Group();
+  const leftMesh = new THREE.Mesh(armGeometry, skinMaterial);
+  left.add(leftMesh);
+
+  const right = new THREE.Group();
+  const rightMesh = new THREE.Mesh(armGeometry, skinMaterial.clone());
+  right.add(rightMesh);
+
+  const weapon = new THREE.Group();
+  const weaponGeometry = new THREE.CylinderGeometry(0.08, 0.08, 1, 18);
+  weaponGeometry.translate(0, -0.5, 0);
+  const weaponMaterial = new THREE.MeshStandardMaterial({color:0xffff66, roughness:0.3, metalness:0.45, emissive:0x222200, emissiveIntensity:0.6});
+  const weaponMesh = new THREE.Mesh(weaponGeometry, weaponMaterial);
+  weaponMesh.rotation.x = Math.PI/2;
+  weapon.add(weaponMesh);
+
+  group.add(left);
+  group.add(right);
+  group.add(weapon);
+
+  camera.add(group);
+
+  const leftTarget = {pos:new THREE.Vector3(), quat:new THREE.Quaternion()};
+  const rightTarget = {pos:new THREE.Vector3(), quat:new THREE.Quaternion()};
+  const weaponTarget = {pos:new THREE.Vector3(), quat:new THREE.Quaternion()};
+  const tempEuler = new THREE.Euler();
+
+  function setTargetsForPose(pose){
+    const safePose = pose || (weaponConfigs[0]?.poses.idle);
+    if(safePose?.left){
+      leftTarget.pos.set(safePose.left.pos[0], safePose.left.pos[1], safePose.left.pos[2]);
+      tempEuler.set(safePose.left.rot[0], safePose.left.rot[1], safePose.left.rot[2], 'XYZ');
+      leftTarget.quat.setFromEuler(tempEuler);
+    }
+    if(safePose?.right){
+      rightTarget.pos.set(safePose.right.pos[0], safePose.right.pos[1], safePose.right.pos[2]);
+      tempEuler.set(safePose.right.rot[0], safePose.right.rot[1], safePose.right.rot[2], 'XYZ');
+      rightTarget.quat.setFromEuler(tempEuler);
+    }
+    if(safePose?.weapon){
+      weaponTarget.pos.set(safePose.weapon.pos[0], safePose.weapon.pos[1], safePose.weapon.pos[2]);
+      tempEuler.set(safePose.weapon.rot[0], safePose.weapon.rot[1], safePose.weapon.rot[2], 'XYZ');
+      weaponTarget.quat.setFromEuler(tempEuler);
+    }
+  }
+
+  const rig = {
+    group,
+    left,
+    right,
+    weapon,
+    weaponMesh,
+    weaponMaterial,
+    weaponId: 1,
+    fireTimer: 0,
+    setWeapon(id, immediate){
+      if(!weaponConfigById.has(id)) return;
+      this.weaponId = id;
+      const cfg = weaponConfigById.get(id) || weaponConfigs[0];
+      const appearance = cfg.appearance || weaponConfigs[0].appearance;
+      if(appearance){
+        if(appearance.color !== undefined) this.weaponMaterial.color.setHex(appearance.color);
+        if(appearance.emissive !== undefined) this.weaponMaterial.emissive.setHex(appearance.emissive);
+        if(appearance.thickness !== undefined){
+          weaponMesh.scale.x = appearance.thickness;
+          weaponMesh.scale.z = appearance.thickness;
+        }
+        if(appearance.length !== undefined){
+          weaponMesh.scale.y = appearance.length;
+        }
+      }
+      this.applyPose('idle', immediate);
+    },
+    applyPose(poseName, immediate){
+      const cfg = weaponConfigById.get(this.weaponId) || weaponConfigs[0];
+      const pose = (cfg.poses && cfg.poses[poseName]) || (cfg.poses && cfg.poses.idle) || weaponConfigs[0].poses.idle;
+      setTargetsForPose(pose);
+      if(immediate){
+        left.position.copy(leftTarget.pos);
+        left.quaternion.copy(leftTarget.quat);
+        right.position.copy(rightTarget.pos);
+        right.quaternion.copy(rightTarget.quat);
+        weapon.position.copy(weaponTarget.pos);
+        weapon.quaternion.copy(weaponTarget.quat);
+      }
+    },
+    triggerFire(){
+      this.fireTimer = 0.15;
+      this.applyPose('fire');
+    },
+    update(dt){
+      if(typeof player !== 'undefined'){
+        group.visible = !player.thirdPerson;
+      }
+      const lerpAlpha = Math.max(0, Math.min(1, dt * 12));
+      left.position.lerp(leftTarget.pos, lerpAlpha);
+      left.quaternion.slerp(leftTarget.quat, lerpAlpha);
+      right.position.lerp(rightTarget.pos, lerpAlpha);
+      right.quaternion.slerp(rightTarget.quat, lerpAlpha);
+      weapon.position.lerp(weaponTarget.pos, lerpAlpha);
+      weapon.quaternion.slerp(weaponTarget.quat, lerpAlpha);
+
+      if(this.fireTimer > 0){
+        this.fireTimer -= dt;
+        if(this.fireTimer <= 0){
+          this.applyPose('idle');
+        }
+      }
+    }
+  };
+
+  rig.applyPose('idle', true);
+  return rig;
+}
+
 buildWeaponWheel();
 
 /* Player */
@@ -239,22 +455,19 @@ const player = {
 };
 
 const alexMesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x6699ff})); scene.add(alexMesh);
-const gun = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,0.8), new THREE.MeshStandardMaterial({color:0xffff00})); camera.add(gun); gun.position.set(0,-0.1,-0.5);
+const armRig = createArmRig();
+equipWeapon(player.weapon, {immediate:true});
 
 /* Controls */
 let keys = {};
 window.addEventListener('keydown', e=>{
   keys[e.code]=true;
   if(e.code==='KeyY') player.thirdPerson = !player.thirdPerson;
-  if(e.code==='Digit1'){
-    player.weapon=1;
-    const idx = weaponWheelState.options.findIndex(opt=>opt.id===1);
-    if(idx>=0){ weaponWheelState.selected = idx; updateWeaponWheelHighlight(); }
-  }
-  if(e.code==='Digit2'){
-    player.weapon=2;
-    const idx = weaponWheelState.options.findIndex(opt=>opt.id===2);
-    if(idx>=0){ weaponWheelState.selected = idx; updateWeaponWheelHighlight(); }
+  if(e.code.startsWith('Digit')){
+    const digit = parseInt(e.code.slice(5), 10);
+    if(!Number.isNaN(digit)){
+      equipWeapon(digit);
+    }
   }
   if(e.code==='KeyQ' && !e.repeat){ openWeaponWheel(); }
 });
@@ -290,7 +503,197 @@ const ooferTemplate = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.Mes
 const enemies=[]; const enemyGroup = new THREE.Group(); scene.add(enemyGroup);
 function spawnEnemy(){ const clone = ooferTemplate.clone(); const angle=Math.random()*Math.PI*2; const dist=10+Math.random()*10; clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist); clone.userData={hp:2}; enemyGroup.add(clone); enemies.push(clone); updateHUD(); }
 
-const bullets=[]; function shoot(){ if(!player.alive || weaponWheelState.open) return; const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion); const origin = player.thirdPerson ? player.pos.clone().add(new THREE.Vector3(0,0.7,0)) : camera.getWorldPosition(new THREE.Vector3()); if(player.weapon===1){ const b = new THREE.Mesh(new THREE.SphereGeometry(0.1,8,8), new THREE.MeshStandardMaterial({color:0xffff00})); b.position.copy(origin); b.userData={dir:dir.clone().normalize(),speed:12,weapon:1,owner:player.id}; scene.add(b); bullets.push(b); sendData({t:'shoot',p:origin.toArray(),d:dir.toArray(),w:1}); } else { const r = new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8), new THREE.MeshStandardMaterial({color:0xffaa00})); r.position.copy(origin); r.userData={dir:dir.clone().normalize(),speed:8,weapon:2,owner:player.id}; scene.add(r); bullets.push(r); sendData({t:'shoot',p:origin.toArray(),d:dir.toArray(),w:2}); } }
+const bullets=[];
+
+function createShotsForWeapon(cfg, origin, dir){
+  const forward = dir.clone().normalize();
+  const thirdPerson = player.thirdPerson;
+  const offset = thirdPerson ? 0.9 : 0.35;
+  const baseOrigin = origin.clone().add(forward.clone().multiplyScalar(offset));
+  if(cfg.type === 'pulse'){
+    return [{
+      type:'pulse',
+      pos: baseOrigin.toArray(),
+      dir: forward.toArray(),
+      speed: 14,
+      size: 0.1,
+      color: cfg.appearance?.color ?? 0xffff66,
+      damage: 1,
+      ttl: 2.2,
+      hitRadius: 0.45,
+      pierce: 0
+    }];
+  }
+  if(cfg.type === 'rocket'){
+    return [{
+      type:'rocket',
+      pos: baseOrigin.toArray(),
+      dir: forward.toArray(),
+      speed: 9,
+      size: 0.32,
+      color: cfg.appearance?.color ?? 0xff5a2f,
+      damage: 2,
+      ttl: 4,
+      hitRadius: 0.6,
+      explode: 1.8,
+      pierce: 0
+    }];
+  }
+  if(cfg.type === 'scatter'){
+    const shots = [];
+    const pelletCount = 6;
+    const euler = new THREE.Euler();
+    const quat = new THREE.Quaternion();
+    for(let i=0;i<pelletCount;i++){
+      const spreadYaw = (Math.random()-0.5) * 0.3;
+      const spreadPitch = (Math.random()-0.5) * 0.22;
+      euler.set(spreadPitch, spreadYaw, 0, 'YXZ');
+      quat.setFromEuler(euler);
+      const pelletDir = forward.clone().applyQuaternion(quat).normalize();
+      const pelletOrigin = origin.clone().add(pelletDir.clone().multiplyScalar(thirdPerson ? 0.9 : 0.32));
+      shots.push({
+        type:'pellet',
+        pos: pelletOrigin.toArray(),
+        dir: pelletDir.toArray(),
+        speed: 11,
+        size: 0.08,
+        color: cfg.appearance?.color ?? 0xfff1c1,
+        damage: 1,
+        ttl: 0.55,
+        hitRadius: 0.35,
+        pierce: 0
+      });
+    }
+    return shots;
+  }
+  const beamOrigin = origin.clone().add(forward.clone().multiplyScalar(thirdPerson ? 1.0 : 0.45));
+  return [{
+    type:'beam',
+    pos: beamOrigin.toArray(),
+    dir: forward.toArray(),
+    color: cfg.appearance?.color ?? 0x5ad4ff,
+    duration: 0.18,
+    length: 12,
+    width: 0.14,
+    damage: 2,
+    hitRadius: 0.75
+  }];
+}
+
+function spawnBulletFromShot(shot, ownerId){
+  const dir = new THREE.Vector3(...(shot.dir || [0,0,-1])).normalize();
+  if(shot.type === 'beam'){
+    const length = shot.length ?? 10;
+    const width = shot.width ?? 0.12;
+    const geometry = new THREE.CylinderGeometry(width, width, length, 16, 1, true);
+    const material = new THREE.MeshStandardMaterial({color: shot.color ?? 0x5ad4ff, emissive: new THREE.Color(shot.color ?? 0x5ad4ff).multiplyScalar(0.35), transparent:true, opacity:0.7, roughness:0.25, metalness:0.1});
+    const mesh = new THREE.Mesh(geometry, material);
+    const origin = new THREE.Vector3(...shot.pos);
+    const midpoint = origin.clone().add(dir.clone().multiplyScalar(length/2));
+    mesh.position.copy(midpoint);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+    mesh.userData = {
+      type:'beam',
+      owner: ownerId,
+      origin,
+      dir,
+      length,
+      damage: shot.damage ?? 2,
+      life: shot.duration ?? 0.15,
+      duration: shot.duration ?? 0.15,
+      hitRadius: shot.hitRadius ?? 0.7,
+      hitIds: new Set()
+    };
+    scene.add(mesh); bullets.push(mesh);
+    return mesh;
+  }
+  const radius = shot.size ?? 0.1;
+  const geometry = new THREE.SphereGeometry(radius, 12, 12);
+  const material = new THREE.MeshStandardMaterial({color: shot.color ?? 0xffffff, emissive: new THREE.Color(shot.color ?? 0xffffff).multiplyScalar(0.3), roughness:0.35, metalness:0.15});
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(shot.pos[0], shot.pos[1], shot.pos[2]);
+  mesh.userData = {
+    type: shot.type || 'pulse',
+    owner: ownerId,
+    dir,
+    speed: shot.speed ?? 10,
+    damage: shot.damage ?? 1,
+    life: shot.ttl ?? 2,
+    hitRadius: shot.hitRadius ?? radius*2,
+    explode: shot.explode ?? 0,
+    pierce: shot.pierce ?? 0
+  };
+  scene.add(mesh); bullets.push(mesh);
+  return mesh;
+}
+
+function cleanupBullet(index){
+  const mesh = bullets[index];
+  if(!mesh) return;
+  scene.remove(mesh);
+  bullets.splice(index,1);
+}
+
+function damageEnemyAtIndex(idx, amount){
+  const enemy = enemies[idx];
+  if(!enemy) return false;
+  enemy.userData.hp -= amount;
+  if(enemy.userData.hp <= 0){
+    enemyGroup.remove(enemy);
+    enemies.splice(idx,1);
+    score += 10;
+    updateHUD();
+    return true;
+  }
+  return false;
+}
+
+function applyExplosion(position, radius, damage){
+  for(let j=enemies.length-1;j>=0;j--){
+    const enemy = enemies[j];
+    if(!enemy) continue;
+    if(enemy.position.distanceTo(position) <= radius){
+      damageEnemyAtIndex(j, damage);
+    }
+  }
+}
+
+function applyBeamDamage(beam){
+  const data = beam.userData;
+  if(!data || !data.origin || !data.dir) return;
+  const origin = data.origin;
+  const dir = data.dir;
+  if(!data.hitIds) data.hitIds = new Set();
+  for(let j=enemies.length-1;j>=0;j--){
+    const enemy = enemies[j];
+    if(!enemy || data.hitIds.has(enemy.uuid)) continue;
+    const toEnemy = new THREE.Vector3().subVectors(enemy.position, origin);
+    const projection = toEnemy.dot(dir);
+    if(projection < 0 || projection > data.length) continue;
+    const perpendicularSq = toEnemy.lengthSq() - projection*projection;
+    const radiusSq = (data.hitRadius ?? 0.7) ** 2;
+    if(perpendicularSq > radiusSq) continue;
+    data.hitIds.add(enemy.uuid);
+    damageEnemyAtIndex(j, data.damage ?? 2);
+  }
+}
+
+function shoot(){
+  if(!player.alive || weaponWheelState.open) return;
+  const cfg = weaponConfigById.get(player.weapon) || weaponConfigs[0];
+  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const origin = player.thirdPerson ? player.pos.clone().add(new THREE.Vector3(0,0.7,0)) : camera.getWorldPosition(new THREE.Vector3());
+  const shots = createShotsForWeapon(cfg, origin, dir);
+  const serialized = [];
+  shots.forEach(shot=>{
+    spawnBulletFromShot(shot, player.id);
+    serialized.push({...shot});
+  });
+  const weaponId = cfg?.id ?? player.weapon;
+  sendData({t:'shoot', w: weaponId, shots: serialized});
+  if(armRig) armRig.triggerFire();
+}
+
 window.addEventListener('mousedown', e=>{ if(e.button===0) shoot(); });
 
 /* HUD update */
@@ -500,11 +903,23 @@ function handleRemoteMessage(peerId, msg){
     updatePlayers();
   }
   if(msg.t === 'shoot'){
-    const pos = new THREE.Vector3(msg.p[0], msg.p[1], msg.p[2]);
-    const dir = new THREE.Vector3(msg.d[0], msg.d[1], msg.d[2]);
-    const bullet = new THREE.Mesh(new THREE.SphereGeometry(msg.w===1?0.1:0.3,8,8), new THREE.MeshStandardMaterial({color: msg.w===1?0xffff00:0xffaa00}));
-    bullet.position.copy(pos); bullet.userData={dir:dir.clone().normalize(), speed: msg.w===1?12:8, weapon: msg.w, owner: sourceId};
-    scene.add(bullet); bullets.push(bullet);
+    if(Array.isArray(msg.shots)){
+      msg.shots.forEach(shot=> spawnBulletFromShot(shot, sourceId));
+    } else if(msg.p && msg.d){
+      const fallback = {
+        type: msg.w === 2 ? 'rocket' : 'pulse',
+        pos: msg.p,
+        dir: msg.d,
+        speed: msg.w === 2 ? 8 : 12,
+        size: msg.w === 2 ? 0.3 : 0.1,
+        color: msg.w === 2 ? 0xffaa00 : 0xffff00,
+        damage: msg.w === 2 ? 2 : 1,
+        ttl: msg.w === 2 ? 4 : 2,
+        hitRadius: msg.w === 2 ? 0.6 : 0.45,
+        explode: msg.w === 2 ? 1.8 : 0
+      };
+      spawnBulletFromShot(fallback, sourceId);
+    }
   }
   if(msg.t === 'reset'){
     bullets.forEach(b=>scene.remove(b)); bullets.length = 0;
@@ -565,22 +980,58 @@ function updatePlayer(dt){
 function updateBullets(dt){
   for(let i=bullets.length-1;i>=0;i--){
     const b = bullets[i];
-    b.position.add(b.userData.dir.clone().multiplyScalar(b.userData.speed * dt));
-    for(let j=enemies.length-1;j>=0;j--){
-      const e = enemies[j];
-      const dist = b.position.distanceTo(e.position);
-      if(dist < 0.6 || (b.userData.weapon===2 && dist < 1.5)){
-        e.userData.hp--;
-        if(e.userData.hp<=0){ enemyGroup.remove(e); enemies.splice(j,1); score+=10; updateHUD(); }
-        if(b.userData.weapon===1){ scene.remove(b); bullets.splice(i,1); break; }
-        if(b.userData.weapon===2){
-          for(let k=enemies.length-1;k>=0;k--){
-            const e2 = enemies[k];
-            if(e2.position.distanceTo(b.position) < 1.5){ e2.userData.hp--; if(e2.userData.hp<=0){ enemyGroup.remove(e2); enemies.splice(k,1); score+=10; updateHUD(); } }
-          }
-          scene.remove(b); bullets.splice(i,1); break;
-        }
+    const data = b.userData || {};
+    if(typeof data.life === 'number'){
+      data.life -= dt;
+    } else {
+      data.life = 3;
+    }
+
+    if(data.type === 'beam'){
+      if(b.material && typeof b.material.opacity === 'number' && data.duration){
+        b.material.opacity = Math.max(0, (data.life / data.duration) * 0.7);
       }
+      applyBeamDamage(b);
+      if(data.life <= 0){
+        cleanupBullet(i);
+      }
+      continue;
+    }
+
+    if(data.dir){
+      b.position.addScaledVector(data.dir, (data.speed ?? 0) * dt);
+    }
+
+    let removed = false;
+    for(let j=enemies.length-1;j>=0;j--){
+      const enemy = enemies[j];
+      if(!enemy) continue;
+      const dist = b.position.distanceTo(enemy.position);
+      if(dist <= (data.hitRadius ?? 0.45)){
+        if(data.type === 'rocket' && data.explode){
+          applyExplosion(b.position, data.explode, data.damage ?? 2);
+        } else {
+          damageEnemyAtIndex(j, data.damage ?? 1);
+        }
+        if(data.pierce && data.pierce > 0){
+          data.pierce -= 1;
+          continue;
+        }
+        removed = true;
+        break;
+      }
+    }
+
+    if(removed){
+      cleanupBullet(i);
+      continue;
+    }
+
+    if(data.life <= 0){
+      if(data.type === 'rocket' && data.explode){
+        applyExplosion(b.position, data.explode, data.damage ?? 2);
+      }
+      cleanupBullet(i);
     }
   }
 }
@@ -632,6 +1083,10 @@ function gameTick(now){
       updateEnemies(dt);
     }
     renderRemotes();
+  }
+
+  if(armRig){
+    armRig.update(dt);
   }
 
   updateHUD();
