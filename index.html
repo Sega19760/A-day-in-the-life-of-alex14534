@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>A day in the life of alex14534 (Now with animations!)</title>
+<title>3D Shooter — LAN P2P (manual SDP)</title>
 <style>
   :root{--bg:#000;--ui-bg:rgba(0,0,0,0.35);--btn:#222}
   html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial}
@@ -62,28 +62,16 @@
   <div id="network">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <label>Name: <input id="nameInput" type="text" placeholder="Your name" style="width:140px"></label>
-      <label>Host IP (display only): <input id="hostIp" type="text" placeholder="e.g. 25.x.x.x" style="width:140px"></label>
+      <label>Server URL: <input id="serverUrl" type="text" placeholder="ws://localhost:3000" style="width:170px"></label>
+      <label>Room Code: <input id="roomCode" type="text" placeholder="my-room" style="width:110px"></label>
       <button id="btnHost">Host</button>
       <button id="btnJoin">Join</button>
+      <button id="btnDisconnect" disabled>Disconnect</button>
       <button id="btnHide">Hide UI</button>
     </div>
 
-    <div id="hostControls" style="margin-top:8px;display:none">
-      <div><button id="createOffer">Create Offer (for a joiner)</button></div>
-      <div style="margin-top:6px">Offer (copy → give to joiner):</div>
-      <textarea id="offerOut" readonly placeholder="Offer will appear here..."></textarea>
-      <div style="margin-top:6px">Paste Answer from joiner:</div>
-      <textarea id="answerIn" placeholder="Paste joiner's answer JSON here"></textarea>
-      <div><button id="acceptAnswer">Accept Answer</button></div>
-    </div>
-
-    <div id="joinControls" style="margin-top:8px;display:none">
-      <div>Paste Host Offer here:</div>
-      <textarea id="offerIn" placeholder="Paste host offer JSON here"></textarea>
-      <div style="margin-top:6px"><button id="createAnswer">Create Answer</button></div>
-      <div style="margin-top:6px">Answer (copy → send to host):</div>
-      <textarea id="answerOut" readonly placeholder="Answer will appear here..."></textarea>
-    </div>
+    <div id="connectionStatus" class="small" style="margin-top:6px">Status: disconnected</div>
+    <div id="networkLog" class="small" style="margin-top:6px;max-height:140px;overflow:auto;white-space:pre-line"></div>
   </div>
 </div>
 
@@ -111,7 +99,11 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshSt
 const hud = document.getElementById('hud');
 const playersDiv = document.getElementById('players');
 const nameInput = document.getElementById('nameInput');
-const hostIpInput = document.getElementById('hostIp');
+const serverUrlInput = document.getElementById('serverUrl');
+const roomInput = document.getElementById('roomCode');
+const statusEl = document.getElementById('connectionStatus');
+const networkLogEl = document.getElementById('networkLog');
+const btnDisconnect = document.getElementById('btnDisconnect');
 const weaponWheelEl = document.getElementById('weaponWheel');
 let remotePlayers = {}; // peerId -> state
 
@@ -969,7 +961,7 @@ window.addEventListener('blur', ()=>{ shootState.down = false; });
 
 /* HUD update */
 let score = 0;
-function updateHUD(){ hud.textContent = `Score: ${score} | Enemies: ${enemies.length} | HP: ${player.hp} | Host IP: ${hostIpInput.value || 'N/A'}`; }
+function updateHUD(){ hud.textContent = `Score: ${score} | Enemies: ${enemies.length} | HP: ${player.hp} | Signaling: ${connectionLabel}`; }
 function updatePlayers(){ let txt = `Players: ${nameInput.value || player.name || 'me'}`; for(const id in remotePlayers){ const r = remotePlayers[id]; txt += '\n' + (r.name || id); } playersDiv.textContent = txt; }
 
 /* Game Over / Retry */
@@ -988,84 +980,285 @@ document.getElementById('retry').addEventListener('click', ()=>{
 });
 
 /* --------------------------
-   Networking: manual SDP P2P
+   Networking: WebSocket assisted P2P
    -------------------------- */
 const btnHost = document.getElementById('btnHost');
 const btnJoin = document.getElementById('btnJoin');
 const btnHide = document.getElementById('btnHide');
-const hostControls = document.getElementById('hostControls');
-const joinControls = document.getElementById('joinControls');
-const createOfferBtn = document.getElementById('createOffer');
-const acceptAnswerBtn = document.getElementById('acceptAnswer');
-const createAnswerBtn = document.getElementById('createAnswer');
-const offerOut = document.getElementById('offerOut');
-const answerIn = document.getElementById('answerIn');
-const offerIn = document.getElementById('offerIn');
-const answerOut = document.getElementById('answerOut');
-
 let peerConnections = {}; // peerId -> RTCPeerConnection
 let dataChannels = {};    // peerId -> DataChannel
-let nextPeerIndex = 1;
 let menuOpen = false;
 let isHost = false;
+let signalingSocket = null;
+let localPeerId = '';
+let activeRoomCode = '';
+let connectionLabel = 'disconnected';
 
 /* pause when menu open */
 function setMenuOpen(open){
   menuOpen = open;
 }
 
+function setSignalingStatus(text, mode='info'){
+  connectionLabel = text;
+  statusEl.textContent = `Status: ${text}`;
+  if(mode === 'connected'){
+    statusEl.style.color = '#8f8';
+  } else if(mode === 'error'){
+    statusEl.style.color = '#f88';
+  } else if(mode === 'connecting'){
+    statusEl.style.color = '#ffd27f';
+  } else {
+    statusEl.style.color = '#fff';
+  }
+  updateHUD();
+}
+
+function logNetwork(msg){
+  const now = new Date();
+  const stamp = now.toLocaleTimeString();
+  networkLogEl.textContent = `${stamp} — ${msg}\n${networkLogEl.textContent}`.slice(0, 4000);
+}
+
+function resetNetworkButtons(){
+  btnHost.disabled = false;
+  btnJoin.disabled = false;
+  btnDisconnect.disabled = true;
+}
+
 /* Hide/Show UI behavior */
 btnHide.onclick = ()=>{
   const networkDiv = document.getElementById('network');
-  if(networkDiv.style.height === '24px'){
-    networkDiv.style.height = '';
+  const collapsed = networkDiv.dataset.collapsed === '1';
+  if(collapsed){
+    networkDiv.dataset.collapsed = '';
+    networkDiv.style.maxHeight = '';
+    networkDiv.style.overflow = '';
     btnHide.textContent = 'Hide UI';
     setMenuOpen(true);
   } else {
-    // collapse host/join controls only (keep top row)
-    hostControls.style.display = 'none';
-    joinControls.style.display = 'none';
-    setMenuOpen(false);
+    networkDiv.dataset.collapsed = '1';
+    networkDiv.style.maxHeight = '32px';
+    networkDiv.style.overflow = 'hidden';
     btnHide.textContent = 'Show UI';
+    setMenuOpen(false);
   }
 };
 
-/* Host / Join mode toggles */
-btnHost.onclick = ()=>{
-  hostControls.style.display = 'block';
-  joinControls.style.display = 'none';
-  btnHost.disabled = true; btnJoin.disabled = true;
-  setMenuOpen(true);
-  isHost = true;
-  player.name = nameInput.value || 'Host';
-  updatePlayers();
-};
-btnJoin.onclick = ()=>{
-  joinControls.style.display = 'block';
-  hostControls.style.display = 'none';
-  btnHost.disabled = true; btnJoin.disabled = true;
-  setMenuOpen(true);
-  isHost = false;
-  player.name = nameInput.value || 'Player';
-  updatePlayers();
+function closeAllPeers(reason){
+  for(const id in dataChannels){
+    try{ dataChannels[id].close(); }catch(e){}
+  }
+  for(const id in peerConnections){
+    try{ peerConnections[id].close(); }catch(e){}
+  }
+  dataChannels = {};
+  peerConnections = {};
+  const remoteIds = Object.keys(remotePlayers);
+  remoteIds.forEach(id=> removeRemote(id));
+  if(reason) logNetwork(reason);
+}
+
+function disconnectFromSignaling(message){
+  if(signalingSocket){
+    try{ signalingSocket.close(); }catch(e){}
+  }
+  signalingSocket = null;
+  localPeerId = '';
+  activeRoomCode = '';
+  resetNetworkButtons();
+  setSignalingStatus('disconnected');
+  if(message){ logNetwork(message); }
+  closeAllPeers();
+}
+
+btnDisconnect.onclick = ()=>{
+  disconnectFromSignaling('Disconnected by user');
 };
 
+function sendSignal(obj){
+  if(!signalingSocket || signalingSocket.readyState !== WebSocket.OPEN) return;
+  const payload = {...obj, room: activeRoomCode};
+  if(localPeerId){
+    payload.from = localPeerId;
+  }
+  try{
+    signalingSocket.send(JSON.stringify(payload));
+  }catch(err){
+    logNetwork(`Failed to send signal: ${err.message || err}`);
+  }
+}
+
+function beginSignaling(role){
+  if(signalingSocket && signalingSocket.readyState === WebSocket.OPEN){
+    logNetwork('Already connected to signaling server.');
+    return;
+  }
+  isHost = role === 'host';
+  player.name = nameInput.value || (isHost ? 'Host' : 'Player');
+  updatePlayers();
+  const url = (serverUrlInput.value || 'ws://localhost:3000').trim();
+  if(!url){
+    alert('Enter a signaling server URL');
+    return;
+  }
+  activeRoomCode = (roomInput.value || 'default').trim();
+  try{
+    signalingSocket = new WebSocket(url);
+  }catch(err){
+    logNetwork(`Failed to connect: ${err.message || err}`);
+    setSignalingStatus('connection failed', 'error');
+    resetNetworkButtons();
+    return;
+  }
+  setMenuOpen(true);
+  btnHost.disabled = true;
+  btnJoin.disabled = true;
+  btnDisconnect.disabled = true;
+  setSignalingStatus('connecting...', 'connecting');
+  logNetwork(`Connecting to ${url} as ${isHost ? 'host' : 'joiner'} (room ${activeRoomCode})`);
+
+  signalingSocket.onopen = ()=>{
+    setSignalingStatus('connected', 'connected');
+    btnDisconnect.disabled = false;
+    const hello = { type:'hello', role: isHost ? 'host' : 'join', room: activeRoomCode, name: player.name, playerId: player.id };
+    try{ signalingSocket.send(JSON.stringify(hello)); }catch(err){ logNetwork(`Failed to register: ${err.message || err}`); }
+  };
+  signalingSocket.onclose = ()=>{
+    logNetwork('Signaling connection closed.');
+    disconnectFromSignaling();
+  };
+  signalingSocket.onerror = err=>{
+    logNetwork(`Signaling error: ${err?.message || err}`);
+  };
+  signalingSocket.onmessage = ev=>{
+    let msg;
+    try{ msg = JSON.parse(ev.data); }catch(e){ return; }
+    handleSignalMessage(msg);
+  };
+}
+
+btnHost.onclick = ()=> beginSignaling('host');
+btnJoin.onclick = ()=> beginSignaling('join');
+
+function handleSignalMessage(msg){
+  if(msg.type === 'welcome'){
+    localPeerId = msg.id;
+    logNetwork(`Registered on server as ${localPeerId}`);
+    return;
+  }
+  if(msg.type === 'error'){
+    setSignalingStatus('error', 'error');
+    logNetwork(`Server error: ${msg.message}`);
+    btnDisconnect.disabled = false;
+    return;
+  }
+  if(msg.type === 'join-request' && isHost){
+    logNetwork(`Join request from ${msg.name || msg.peerId}`);
+    createOfferForPeer(msg.peerId, msg.name, msg.playerId);
+    return;
+  }
+  if(msg.type === 'offer' && !isHost){
+    receiveOfferFromHost(msg);
+    return;
+  }
+  if(msg.type === 'answer' && isHost){
+    applyAnswerFromPeer(msg);
+    return;
+  }
+  if(msg.type === 'ice'){
+    applyRemoteIceCandidate(msg);
+    return;
+  }
+  if(msg.type === 'peer-left'){
+    logNetwork(`Peer ${msg.peerId} left`);
+    removeRemote(msg.peerId);
+    if(peerConnections[msg.peerId]){
+      try{ peerConnections[msg.peerId].close(); }catch(e){}
+      delete peerConnections[msg.peerId];
+    }
+    if(dataChannels[msg.peerId]) delete dataChannels[msg.peerId];
+    updatePlayers();
+  }
+}
+
+function createOfferForPeer(peerId, displayName, playerId){
+  const pc = makePeer(peerId, playerId);
+  const channel = pc.createDataChannel('game');
+  setupDataChannel(peerId, channel, displayName, playerId);
+  pc.createOffer().then(offer=>{
+    return pc.setLocalDescription(offer);
+  }).then(()=>{
+    sendSignal({type:'offer', target: peerId, sdp: pc.localDescription});
+  }).catch(err=>{
+    logNetwork(`Offer error for ${peerId}: ${err.message || err}`);
+  });
+}
+
+function receiveOfferFromHost(msg){
+  const peerId = msg.peerId;
+  const pc = makePeer(peerId, msg.playerId);
+  pc.ondatachannel = ev=> setupDataChannel(peerId, ev.channel, msg.name, msg.playerId);
+  const remoteDesc = new RTCSessionDescription(msg.sdp);
+  pc.setRemoteDescription(remoteDesc).then(()=>{
+    return pc.createAnswer();
+  }).then(answer=>{
+    return pc.setLocalDescription(answer);
+  }).then(()=>{
+    sendSignal({type:'answer', target: peerId, sdp: pc.localDescription});
+  }).catch(err=>{
+    logNetwork(`Answer error: ${err.message || err}`);
+  });
+}
+
+function applyAnswerFromPeer(msg){
+  const pc = peerConnections[msg.peerId];
+  if(!pc) return;
+  const remoteDesc = new RTCSessionDescription(msg.sdp);
+  pc.setRemoteDescription(remoteDesc).catch(err=>{
+    logNetwork(`Remote desc error: ${err.message || err}`);
+  });
+}
+
+function applyRemoteIceCandidate(msg){
+  const pc = peerConnections[msg.peerId];
+  if(!pc || !msg.candidate) return;
+  pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(err=>{
+    logNetwork(`ICE candidate error: ${err.message || err}`);
+  });
+}
+
 /* helper to make a new RTCPeerConnection */
-function makePeer(peerId){
+function makePeer(peerId, remotePlayerId){
   const pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  peerConnections[peerId] = pc;
   pc.onicecandidate = ev=>{
-    // we rely on SDP after a small timeout; ICE candidates may still trickle but manual flow often works on LAN/Hamachi
+    if(ev.candidate){
+      sendSignal({type:'ice', target: peerId, candidate: ev.candidate});
+    }
+  };
+  pc.onconnectionstatechange = ()=>{
+    if(pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed'){
+      removeRemote(peerId);
+      delete peerConnections[peerId];
+      delete dataChannels[peerId];
+      updatePlayers();
+    }
   };
   pc.ondatachannel = ev=>{
-    setupDataChannel(peerId, ev.channel);
+    setupDataChannel(peerId, ev.channel, undefined, remotePlayerId);
   };
   return pc;
 }
 
 /* set up datachannel handlers */
-function setupDataChannel(peerId, ch){
+function setupDataChannel(peerId, ch, displayName, remotePlayerId){
   dataChannels[peerId] = ch;
-  ch.onopen = ()=>{ console.log('DataChannel open', peerId); };
+  if(displayName){
+    if(!remotePlayers[peerId]) remotePlayers[peerId] = {id: remotePlayerId || peerId, pos:new THREE.Vector3(), yaw:0, pitch:0, name:displayName};
+    updatePlayers();
+  }
+  ch.onopen = ()=>{ logNetwork(`Data channel open: ${peerId}`); };
   ch.onmessage = ev=>{
     try{
       const msg = JSON.parse(ev.data);
@@ -1073,7 +1266,7 @@ function setupDataChannel(peerId, ch){
     }catch(e){}
   };
   ch.onclose = ()=>{
-    console.log('DC closed', peerId);
+    logNetwork(`Data channel closed: ${peerId}`);
     delete dataChannels[peerId];
     delete peerConnections[peerId];
     removeRemote(peerId);
@@ -1082,50 +1275,6 @@ function setupDataChannel(peerId, ch){
     }
   };
 }
-
-/* create offer (host creates one offer per joiner) */
-createOfferBtn.onclick = async ()=>{
-  const peerId = 'peer'+(nextPeerIndex++);
-  const pc = makePeer(peerId);
-  peerConnections[peerId] = pc;
-  const ch = pc.createDataChannel('game');
-  setupDataChannel(peerId, ch);
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  setTimeout(()=>{ offerOut.value = JSON.stringify(pc.localDescription); alert('Offer created. Copy the Offer text and send to the joiner. After joiner sends their Answer paste it into "Paste Answer" and click Accept Answer.'); }, 700);
-};
-
-/* accept answer (host pastes joiner's answer for last created peer) */
-acceptAnswerBtn.onclick = async ()=>{
-  const txt = answerIn.value.trim();
-  if(!txt){ alert('Paste joiner Answer first'); return; }
-  const ids = Object.keys(peerConnections);
-  if(ids.length===0){ alert('No pending offer — create Offer first'); return; }
-  const lastId = ids[ids.length-1];
-  const pc = peerConnections[lastId];
-  try{
-    const remoteDesc = JSON.parse(txt);
-    await pc.setRemoteDescription(remoteDesc);
-    answerIn.value = '';
-    alert('Answer accepted. Connection should establish shortly.');
-  }catch(err){ alert('Could not set remote description: '+err); }
-};
-
-/* joiner creates answer after pasting host offer */
-createAnswerBtn.onclick = async ()=>{
-  const txt = offerIn.value.trim();
-  if(!txt){ alert('Paste host Offer first'); return; }
-  try{
-    const remoteDesc = JSON.parse(txt);
-    const pc = makePeer('host');
-    peerConnections['host'] = pc;
-    pc.ondatachannel = ev=> setupDataChannel('host', ev.channel);
-    await pc.setRemoteDescription(remoteDesc);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    setTimeout(()=>{ answerOut.value = JSON.stringify(pc.localDescription); alert('Answer created. Copy Answer text and send to host.'); }, 700);
-  }catch(err){ alert('Invalid Offer or error: '+err); }
-};
 
 /* broadcast object to all open DCs */
 function sendData(obj, skipId){
