@@ -89,8 +89,8 @@
 
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
-import { OBJLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/OBJLoader.js';
-import { MTLLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/MTLLoader.js';
+import { OBJLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/OBJLoader.js?module';
+import { MTLLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/MTLLoader.js?module';
 
 /* -------------------------
    Scene + basic game setup
@@ -99,6 +99,7 @@ const container = document.getElementById('container');
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0a0a);
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
 camera.position.set(0,0.7,0);
+scene.add(camera);
 const renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth, innerHeight); container.appendChild(renderer.domElement);
 window.addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); positionWeaponWheelOptions(); weaponWheelState.pointer = {x: innerWidth/2, y: innerHeight/2}; });
 
@@ -293,8 +294,8 @@ async function ensureHighQualityModels(){
   if(enemyTemplates.high && playerTemplates.high) return;
   if(highQualityLoadPromise) return highQualityLoadPromise;
   highQualityLoadPromise = Promise.all([
-    loadObjWithMtl('oofer.obj', 'oofer.mtl').then(object=>{ enemyTemplates.high = prepareModelGroup(object, 1); }),
-    loadObjWithMtl('alex.obj', 'alex.mtl').then(object=>{ playerTemplates.high = prepareModelGroup(object, 1); })
+    loadObjWithMtl('models/oofer.obj', 'models/oofer.mtl').then(object=>{ enemyTemplates.high = prepareModelGroup(object, 1); }),
+    loadObjWithMtl('models/alex.obj', 'models/alex.mtl').then(object=>{ playerTemplates.high = prepareModelGroup(object, 1); })
   ]).catch(err=>{
     console.error('Failed to load high quality assets', err);
     throw err;
