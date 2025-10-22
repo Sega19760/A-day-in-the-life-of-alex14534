@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>3D Shooter — LAN P2P (manual SDP)</title>
+<title>A day in the life of alex14534</title>
 <style>
   :root{--bg:#000;--ui-bg:rgba(0,0,0,0.35);--btn:#222}
   html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial}
@@ -44,7 +44,7 @@
 
   <div class="instructions">
     <strong>Controls</strong><br>
-    WASD - move<br>Mouse - look<br>Click - shoot (hold to spray)<br>Space - jump<br>Y - toggle view<br>Esc - release mouse<br>1-4 - quick swap weapons<br>Hold Q - weapon wheel<br>Weapons: 1 Pulse | 2 Rocket | 3 Scatter | 4 Pee Stream
+    WASD - move<br>Mouse - look<br>Click - shoot (hold to spray)<br>Space - jump<br>Y - toggle view<br>Esc - release mouse<br>1-4 - quick swap weapons<br>Hold Q - weapon wheel<br>H - toggle high quality<br>Weapons: 1 Pulse | 2 Rocket | 3 Scatter | 4 Pee Stream
   </div>
 
   <div class="crosshair"></div>
@@ -89,6 +89,8 @@
 
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
+import { OBJLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/MTLLoader.js';
 
 /* -------------------------
    Scene + basic game setup
@@ -110,6 +112,7 @@ const playersDiv = document.getElementById('players');
 const nameInput = document.getElementById('nameInput');
 const hostIpInput = document.getElementById('hostIp');
 const weaponWheelEl = document.getElementById('weaponWheel');
+let remotePlayers = {}; // peerId -> state
 
 const weaponConfigs = [
   {
@@ -187,7 +190,7 @@ const weaponConfigs = [
     firePoseDuration: 0.1,
     sway: {amplitude: 0.018, speed: 4.2, tilt: 0.03},
     appearance: {color: 0xfff57a, emissive: 0x463800, emissiveIntensity: 0.35, length: 1.2, thickness: 0.75},
-    stream: {count: 8, spreadYaw: 0.26, spreadPitch: 0.2, speed: 12, size: 0.06, damage: 0.015, ttl: 0.6, hitRadius: 0.28, gravity: 4.2},
+    stream: {count: 8, spreadYaw: 0.26, spreadPitch: 0.2, speed: 12, size: 0.06, damage: 0.03, ttl: 0.6, hitRadius: 0.28, gravity: 4.2},
     poses: {
       idle: {
         left: {pos: [-0.18, -0.07, -0.44], rot: [-0.35, 0.05, 1.2]},
@@ -213,6 +216,145 @@ const weaponWheelState = {
   centerEl: null
 };
 const shootState = {down:false, cooldown:0};
+
+function cloneTemplate(template){
+  const clone = template.clone(true);
+  clone.traverse(node=>{
+    if(node.isMesh && node.material){
+      if(Array.isArray(node.material)){
+        node.material = node.material.map(mat=> mat && mat.clone ? mat.clone() : mat);
+      } else {
+        node.material = node.material.clone ? node.material.clone() : node.material;
+      }
+    }
+  });
+  return clone;
+}
+
+function createLowEnemyTemplate(){
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0xff5555}));
+  group.add(mesh);
+  return group;
+}
+
+function createLowPlayerTemplate(){
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x6699ff}));
+  group.add(mesh);
+  return group;
+}
+
+function prepareModelGroup(object, targetHeight=1){
+  const group = new THREE.Group();
+  group.add(object);
+  object.traverse(node=>{
+    if(node.isMesh && node.material){
+      if(Array.isArray(node.material)){
+        node.material = node.material.map(mat=> mat && mat.clone ? mat.clone() : mat);
+      } else if(node.material.isMaterial && node.material.clone){
+        node.material = node.material.clone();
+      }
+    }
+  });
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  if(size.y > 0 && targetHeight){
+    const scale = targetHeight / size.y;
+    object.scale.multiplyScalar(scale);
+  }
+  const centeredBox = new THREE.Box3().setFromObject(object);
+  const center = centeredBox.getCenter(new THREE.Vector3());
+  object.position.sub(center);
+  return group;
+}
+
+function loadObjWithMtl(objPath, mtlPath){
+  return new Promise((resolve, reject)=>{
+    const mtlLoader = new MTLLoader();
+    mtlLoader.setPath('./');
+    mtlLoader.setResourcePath('./');
+    mtlLoader.load(mtlPath, materials=>{
+      materials.preload();
+      const objLoader = new OBJLoader();
+      objLoader.setMaterials(materials);
+      objLoader.setPath('./');
+      objLoader.load(objPath, resolve, undefined, reject);
+    }, undefined, reject);
+  });
+}
+
+let highQuality = false;
+let highQualityLoadPromise = null;
+const enemyTemplates = { low: createLowEnemyTemplate(), high: null };
+const playerTemplates = { low: createLowPlayerTemplate(), high: null };
+
+async function ensureHighQualityModels(){
+  if(enemyTemplates.high && playerTemplates.high) return;
+  if(highQualityLoadPromise) return highQualityLoadPromise;
+  highQualityLoadPromise = Promise.all([
+    loadObjWithMtl('oofer.obj', 'oofer.mtl').then(object=>{ enemyTemplates.high = prepareModelGroup(object, 1); }),
+    loadObjWithMtl('alex.obj', 'alex.mtl').then(object=>{ playerTemplates.high = prepareModelGroup(object, 1); })
+  ]).catch(err=>{
+    console.error('Failed to load high quality assets', err);
+    throw err;
+  }).finally(()=>{ highQualityLoadPromise = null; });
+  return highQualityLoadPromise;
+}
+
+function getActiveEnemyTemplate(){
+  return (highQuality && enemyTemplates.high) ? enemyTemplates.high : enemyTemplates.low;
+}
+
+function getActivePlayerTemplate(){
+  return (highQuality && playerTemplates.high) ? playerTemplates.high : playerTemplates.low;
+}
+
+function applyQualityTemplates(){
+  if(alexMesh){
+    while(alexMesh.children.length){ alexMesh.remove(alexMesh.children[0]); }
+    alexMesh.add(cloneTemplate(getActivePlayerTemplate()));
+  }
+  if(enemyGroup){
+    for(let i=0;i<enemies.length;i++){
+      const enemy = enemies[i];
+      if(!enemy) continue;
+      const clone = cloneTemplate(getActiveEnemyTemplate());
+      clone.position.copy(enemy.position);
+      clone.quaternion.copy(enemy.quaternion);
+      clone.userData = {...enemy.userData};
+      enemyGroup.remove(enemy);
+      enemyGroup.add(clone);
+      enemies[i] = clone;
+    }
+  }
+  if(remotePlayers){
+    for(const id in remotePlayers){
+      const rp = remotePlayers[id];
+      if(rp && rp.mesh){
+        scene.remove(rp.mesh);
+        rp.mesh = null;
+      }
+    }
+  }
+}
+
+async function toggleHighQualityMode(){
+  const targetState = !highQuality;
+  if(targetState){
+    try{
+      await ensureHighQualityModels();
+      highQuality = true;
+    }catch(err){
+      console.error('Unable to enable high quality mode', err);
+      highQuality = false;
+      return;
+    }
+  } else {
+    highQuality = false;
+  }
+  applyQualityTemplates();
+}
 
 function buildWeaponWheel(){
   weaponWheelEl.innerHTML = '<div class="weapon-wheel-hint">Move the mouse to highlight a weapon</div>';
@@ -495,7 +637,9 @@ const player = {
   name: 'me'
 };
 
-const alexMesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x6699ff})); scene.add(alexMesh);
+const alexMesh = new THREE.Group();
+scene.add(alexMesh);
+alexMesh.add(cloneTemplate(getActivePlayerTemplate()));
 const armRig = createArmRig();
 equipWeapon(player.weapon, {immediate:true});
 
@@ -504,6 +648,7 @@ let keys = {};
 window.addEventListener('keydown', e=>{
   keys[e.code]=true;
   if(e.code==='KeyY') player.thirdPerson = !player.thirdPerson;
+  if(e.code==='KeyH' && !e.repeat){ toggleHighQualityMode(); }
   if(e.code.startsWith('Digit')){
     const digit = parseInt(e.code.slice(5), 10);
     if(!Number.isNaN(digit)){
@@ -545,9 +690,18 @@ document.addEventListener('mousemove', e=>{
 });
 
 /* Enemies & bullets */
-const ooferTemplate = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0xff5555}));
 const enemies=[]; const enemyGroup = new THREE.Group(); scene.add(enemyGroup);
-function spawnEnemy(){ const clone = ooferTemplate.clone(); const angle=Math.random()*Math.PI*2; const dist=10+Math.random()*10; clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist); clone.userData={hp:2}; enemyGroup.add(clone); enemies.push(clone); updateHUD(); }
+function spawnEnemy(){
+  const template = getActiveEnemyTemplate();
+  const clone = cloneTemplate(template);
+  const angle=Math.random()*Math.PI*2;
+  const dist=10+Math.random()*10;
+  clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist);
+  clone.userData = {...(clone.userData||{}), hp:2, speed:1.2, fleeTimer:0};
+  enemyGroup.add(clone);
+  enemies.push(clone);
+  updateHUD();
+}
 
 const bullets=[];
 
@@ -634,7 +788,7 @@ function createShotsForWeapon(cfg, origin, dir){
         speed: stream.speed || 12,
         size: stream.size || 0.06,
         color: cfg.appearance?.color ?? 0xfff57a,
-        damage: stream.damage || 0.015,
+        damage: stream.damage || 0.03,
         ttl: stream.ttl || 0.6,
         hitRadius: stream.hitRadius || 0.28,
         gravity: stream.gravity || 4.2,
@@ -728,9 +882,19 @@ function cleanupBullet(index){
   bullets.splice(index,1);
 }
 
-function damageEnemyAtIndex(idx, amount){
+function scareEnemy(enemy){
+  if(!enemy || !enemy.userData) return;
+  const data = enemy.userData;
+  const fleeDuration = 2.4;
+  const fleeSpeed = 4.5;
+  data.fleeTimer = Math.max(data.fleeTimer || 0, fleeDuration);
+  data.fleeSpeed = Math.max(data.fleeSpeed || 0, fleeSpeed);
+}
+
+function damageEnemyAtIndex(idx, amount, onSurvive){
   const enemy = enemies[idx];
   if(!enemy) return false;
+  if(typeof enemy.userData.hp !== 'number'){ enemy.userData.hp = 2; }
   enemy.userData.hp -= amount;
   if(enemy.userData.hp <= 0){
     enemyGroup.remove(enemy);
@@ -739,6 +903,7 @@ function damageEnemyAtIndex(idx, amount){
     updateHUD();
     return true;
   }
+  if(typeof onSurvive === 'function') onSurvive(enemy);
   return false;
 }
 
@@ -839,7 +1004,6 @@ const answerOut = document.getElementById('answerOut');
 
 let peerConnections = {}; // peerId -> RTCPeerConnection
 let dataChannels = {};    // peerId -> DataChannel
-let remotePlayers = {};   // peerId -> state
 let nextPeerIndex = 1;
 let menuOpen = false;
 let isHost = false;
@@ -1022,7 +1186,7 @@ function handleRemoteMessage(peerId, msg){
         speed: msg.w === 2 ? 8 : msg.w === 4 ? 12 : 12,
         size: msg.w === 2 ? 0.3 : msg.w === 4 ? 0.06 : 0.1,
         color: msg.w === 2 ? 0xffaa00 : msg.w === 4 ? 0xfff57a : 0xffff00,
-        damage: msg.w === 2 ? 2 : msg.w === 4 ? 0.12 : 1,
+        damage: msg.w === 2 ? 2 : msg.w === 4 ? 0.03 : 1,
         ttl: msg.w === 2 ? 4 : msg.w === 4 ? 0.6 : 2,
         hitRadius: msg.w === 2 ? 0.6 : msg.w === 4 ? 0.28 : 0.45,
         explode: msg.w === 2 ? 1.8 : 0,
@@ -1087,6 +1251,10 @@ function updatePlayer(dt){
 }
 
 /* bullets & enemies update */
+function isPlayerJumping(){
+  return !player.canJump;
+}
+
 function updateBullets(dt){
   for(let i=bullets.length-1;i>=0;i--){
     const b = bullets[i];
@@ -1131,7 +1299,9 @@ function updateBullets(dt){
         if(data.type === 'rocket' && data.explode){
           applyExplosion(b.position, data.explode, data.damage ?? 2);
         } else {
-          damageEnemyAtIndex(j, data.damage ?? 1);
+          const shouldScare = data.type === 'pee' && data.owner === player.id && isPlayerJumping();
+          const onSurvive = shouldScare ? scareEnemy : undefined;
+          damageEnemyAtIndex(j, data.damage ?? 1, onSurvive);
         }
         if(data.pierce && data.pierce > 0){
           data.pierce -= 1;
@@ -1155,22 +1325,37 @@ function updateBullets(dt){
     }
   }
 }
+const enemyScratch = new THREE.Vector3();
 function updateEnemies(dt){
   for(let i=enemies.length-1;i>=0;i--){
     const e = enemies[i];
-    const dir = new THREE.Vector3().subVectors(player.pos, e.position); dir.y = 0;
-    const dist = dir.length(); dir.normalize();
-    e.position.add(dir.multiplyScalar(1.2 * dt));
+    if(!e) continue;
+    const data = e.userData || (e.userData = {});
+    enemyScratch.copy(player.pos).sub(e.position);
+    enemyScratch.y = 0;
+    const dist = enemyScratch.length();
+    if(dist === 0) continue;
+    if(data.fleeTimer && data.fleeTimer > 0){
+      data.fleeTimer = Math.max(0, data.fleeTimer - dt);
+      const fleeDir = enemyScratch.normalize().negate();
+      const fleeSpeed = data.fleeSpeed || 4.5;
+      e.position.addScaledVector(fleeDir, fleeSpeed * dt);
+      continue;
+    }
+    const chaseDir = enemyScratch.normalize();
+    const chaseSpeed = data.speed || 1.2;
+    e.position.addScaledVector(chaseDir, chaseSpeed * dt);
     if(dist < 1.0 && player.alive){ player.hp = 0; player.alive = false; updateHUD(); gameOverDiv.style.display = 'block'; }
   }
 }
 
 /* render remote players */
 function renderRemotes(){
+  const template = getActivePlayerTemplate();
   for(const id in remotePlayers){
     const rp = remotePlayers[id];
     if(!rp.mesh){
-      rp.mesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0xffaa66}));
+      rp.mesh = cloneTemplate(template);
       scene.add(rp.mesh);
     }
     if(rp.pos) rp.mesh.position.copy(rp.pos);
@@ -1229,6 +1414,10 @@ window._send = sendData;
 window.addEventListener('beforeunload', ()=>{
   try{ sendData({t:'peer_left', from: isHost ? 'host' : 'self'}); }catch(e){}
 });
+
+</script>
+</body>
+</html>
 
 </script>
 </body>
