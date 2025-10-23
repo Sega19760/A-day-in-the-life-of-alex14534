@@ -57,7 +57,7 @@
 
   <div class="instructions">
     <strong>Controls</strong><br>
-    WASD - move<br>Mouse - look<br>Click - shoot (hold to spray)<br>Space - jump<br>Y - toggle view<br>Esc - release mouse<br>1-4 - quick swap weapons<br>Hold Q - weapon wheel<br>H - toggle high quality<br>Weapons: 1 Pulse | 2 Rocket | 3 Scatter | 4 Pee Stream
+    WASD - move<br>Mouse - look<br>Click - shoot (hold to spray)<br>Space - jump / wall jump<br>Shift - slide boost<br>Y - toggle view<br>Esc - release mouse<br>1-4 - quick swap weapons<br>Hold Q - weapon wheel<br>H - toggle high quality<br>Weapons: 1 Pulse | 2 Rocket | 3 Scatter | 4 Pee Stream
   </div>
 
   <div class="crosshair"></div>
@@ -125,7 +125,8 @@ import { MTLLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/
    Scene + basic game setup
    ------------------------- */
 const container = document.getElementById('container');
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0a0a);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x87b9ff);
+scene.fog = new THREE.Fog(0x87b9ff, 40, 180);
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
 camera.position.set(0,0.7,0);
 scene.add(camera);
@@ -134,7 +135,158 @@ window.addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; ca
 
 scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
 const dir = new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(-10,10,5); scene.add(dir);
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x1e1e1e})); ground.rotation.x=-Math.PI/2; scene.add(ground);
+
+const environment = new THREE.Group();
+scene.add(environment);
+
+const staticColliders = [];
+function addBoxCollider(minX, minY, minZ, maxX, maxY, maxZ){
+  staticColliders.push(new THREE.Box3(new THREE.Vector3(minX, minY, minZ), new THREE.Vector3(maxX, maxY, maxZ)));
+}
+
+const groundMaterial = new THREE.MeshStandardMaterial({color:0x3d9a4a, roughness:0.85, metalness:0.08});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), groundMaterial);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+environment.add(ground);
+
+const path = new THREE.Mesh(new THREE.PlaneGeometry(8,26), new THREE.MeshStandardMaterial({color:0x9a7b55, roughness:0.92, metalness:0.05}));
+path.rotation.x = -Math.PI/2;
+path.position.set(0,0.02,-9);
+environment.add(path);
+
+const houseGroup = new THREE.Group();
+const houseBase = new THREE.Mesh(new THREE.BoxGeometry(5.4,3.2,5.4), new THREE.MeshStandardMaterial({color:0xa0785a, roughness:0.72}));
+houseBase.position.y = 1.6;
+houseGroup.add(houseBase);
+const roof = new THREE.Mesh(new THREE.ConeGeometry(4.3,2.8,4), new THREE.MeshStandardMaterial({color:0x7a2a22, roughness:0.45}));
+roof.position.y = 3.8;
+roof.rotation.y = Math.PI/4;
+houseGroup.add(roof);
+const door = new THREE.Mesh(new THREE.BoxGeometry(1.2,2.2,0.2), new THREE.MeshStandardMaterial({color:0x3b281a, roughness:0.6}));
+door.position.set(0,1.1,2.7);
+houseGroup.add(door);
+const windowMat = new THREE.MeshStandardMaterial({color:0x8fd5ff, emissive:0x1a2a33, emissiveIntensity:0.25, roughness:0.2});
+const windowLeft = new THREE.Mesh(new THREE.PlaneGeometry(1.2,1.2), windowMat);
+windowLeft.position.set(-1.6,1.6,2.71);
+windowLeft.rotation.y = Math.PI;
+houseGroup.add(windowLeft);
+const windowRight = windowLeft.clone();
+windowRight.position.x = 1.6;
+houseGroup.add(windowRight);
+houseGroup.position.set(9,0,-6);
+environment.add(houseGroup);
+addBoxCollider(9-2.8, 0, -6-2.8, 9+2.8, 3.4, -6+2.8);
+
+const mountain = new THREE.Mesh(new THREE.ConeGeometry(7.5,10,6), new THREE.MeshStandardMaterial({color:0x61615f, roughness:0.96}));
+mountain.position.set(-12,5,14);
+environment.add(mountain);
+addBoxCollider(-12-5, 0, 14-5, -12+5, 10, 14+5);
+
+const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4,0), new THREE.MeshStandardMaterial({color:0x5a534c, roughness:0.88}));
+rock.position.set(-4,1.2,-3);
+environment.add(rock);
+addBoxCollider(-6.2,0,-5.2,-1.8,2.4,-0.8);
+
+const shrubGeometry = new THREE.ConeGeometry(0.6,1.2,6);
+const shrubMaterial = new THREE.MeshStandardMaterial({color:0x2f7c34, roughness:0.9});
+[[ -2, -11 ], [ 5, -4 ], [ -8, 6 ], [ 3, 10 ], [ 11, -2 ]].forEach(([x,z])=>{
+  const shrub = new THREE.Mesh(shrubGeometry, shrubMaterial);
+  shrub.position.set(x,0.6,z);
+  environment.add(shrub);
+});
+
+const signCanvas = document.createElement('canvas');
+signCanvas.width = 512;
+signCanvas.height = 256;
+const signCtx = signCanvas.getContext('2d');
+const signTexture = new THREE.CanvasTexture(signCanvas);
+signTexture.anisotropy = 4;
+const signMaterial = new THREE.MeshStandardMaterial({map: signTexture, transparent: true, roughness:0.82, metalness:0.12, side: THREE.DoubleSide});
+const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.3), signMaterial);
+signBoard.position.set(0,1.6,0);
+const signPostMaterial = new THREE.MeshStandardMaterial({color:0x8e6b42, roughness:0.9});
+const signPostLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,2.4,10), signPostMaterial);
+signPostLeft.position.set(-0.9,1.2,0);
+const signPostRight = signPostLeft.clone();
+signPostRight.position.x = 0.9;
+const signGroup = new THREE.Group();
+signGroup.add(signBoard);
+signGroup.add(signPostLeft);
+signGroup.add(signPostRight);
+const signBeam = new THREE.Mesh(new THREE.BoxGeometry(2.2,0.18,0.2), signPostMaterial);
+signBeam.position.set(0,2.2,0);
+signGroup.add(signBeam);
+signGroup.position.set(2.5,0,-14);
+environment.add(signGroup);
+addBoxCollider(signGroup.position.x - 0.5, 0, signGroup.position.z - 0.5, signGroup.position.x + 0.5, 2.6, signGroup.position.z + 0.5);
+
+function updatePopulationSign(count){
+  if(!signCtx || !signTexture) return;
+  const display = Math.max(1, Math.round(count));
+  if(updatePopulationSign.last === display) return;
+  updatePopulationSign.last = display;
+  signCtx.fillStyle = '#2f6b24';
+  signCtx.fillRect(0,0,signCanvas.width,signCanvas.height);
+  signCtx.fillStyle = '#1c4815';
+  signCtx.fillRect(18,18,signCanvas.width-36,signCanvas.height-36);
+  signCtx.lineWidth = 6;
+  signCtx.strokeStyle = '#d7cfa2';
+  signCtx.strokeRect(18,18,signCanvas.width-36,signCanvas.height-36);
+  signCtx.fillStyle = '#f2eccb';
+  signCtx.font = 'bold 52px "Segoe UI", sans-serif';
+  signCtx.textAlign = 'left';
+  signCtx.textBaseline = 'top';
+  signCtx.fillText('Welcome to Alexland', 32, 60);
+  signCtx.font = 'bold 44px "Segoe UI", sans-serif';
+  signCtx.fillText(`Population: ${display}`, 32, 140);
+  signTexture.needsUpdate = true;
+}
+updatePopulationSign(1);
+
+function resolveWorldCollisions(nextPosition){
+  const adjusted = nextPosition.clone();
+  let hitNormal = null;
+  const radius = player?.radius ?? 0.45;
+  const height = player?.height ?? 1.6;
+  const playerBottom = nextPosition.y;
+  const playerTop = playerBottom + height;
+  for(const box of staticColliders){
+    if(playerTop <= box.min.y || playerBottom >= box.max.y) continue;
+    const expandedMinX = box.min.x - radius;
+    const expandedMaxX = box.max.x + radius;
+    const expandedMinZ = box.min.z - radius;
+    const expandedMaxZ = box.max.z + radius;
+    if(adjusted.x >= expandedMinX && adjusted.x <= expandedMaxX && adjusted.z >= expandedMinZ && adjusted.z <= expandedMaxZ){
+      const centerX = (box.min.x + box.max.x) / 2;
+      const centerZ = (box.min.z + box.max.z) / 2;
+      const overlapX = Math.min(expandedMaxX - adjusted.x, adjusted.x - expandedMinX);
+      const overlapZ = Math.min(expandedMaxZ - adjusted.z, adjusted.z - expandedMinZ);
+      if(overlapX < overlapZ){
+        if(adjusted.x > centerX){
+          adjusted.x = expandedMaxX;
+          if(player.velocity.x > 0) player.velocity.x = 0;
+          hitNormal = new THREE.Vector3(1,0,0);
+        } else {
+          adjusted.x = expandedMinX;
+          if(player.velocity.x < 0) player.velocity.x = 0;
+          hitNormal = new THREE.Vector3(-1,0,0);
+        }
+      } else {
+        if(adjusted.z > centerZ){
+          adjusted.z = expandedMaxZ;
+          if(player.velocity.z > 0) player.velocity.z = 0;
+          hitNormal = new THREE.Vector3(0,0,1);
+        } else {
+          adjusted.z = expandedMinZ;
+          if(player.velocity.z < 0) player.velocity.z = 0;
+          hitNormal = new THREE.Vector3(0,0,-1);
+        }
+      }
+    }
+  }
+  return { position: adjusted, normal: hitNormal };
+}
 
 /* HUD elements */
 const hud = document.getElementById('hud');
@@ -318,14 +470,21 @@ function prepareModelGroup(object, targetHeight=1){
 function loadObjWithMtl(objPath, mtlPath){
   return new Promise((resolve, reject)=>{
     const mtlLoader = new MTLLoader();
-    mtlLoader.setPath('./');
-    mtlLoader.setResourcePath('./');
-    mtlLoader.load(mtlPath, materials=>{
+    const resolvePath = path=>{
+      const idx = path.lastIndexOf('/');
+      return idx >= 0 ? { dir: path.slice(0, idx + 1), file: path.slice(idx + 1) } : { dir: '', file: path };
+    };
+    const mtl = resolvePath(mtlPath);
+    const obj = resolvePath(objPath);
+    mtlLoader.setPath(mtl.dir || './');
+    mtlLoader.setResourcePath(mtl.dir || obj.dir || './');
+    mtlLoader.load(mtl.file, materials=>{
       materials.preload();
       const objLoader = new OBJLoader();
       objLoader.setMaterials(materials);
-      objLoader.setPath('./');
-      objLoader.load(objPath, resolve, undefined, reject);
+      objLoader.setPath(obj.dir || './');
+      objLoader.setResourcePath(obj.dir || './');
+      objLoader.load(obj.file, resolve, undefined, reject);
     }, undefined, reject);
   });
 }
@@ -670,15 +829,26 @@ buildWeaponWheel();
 const player = {
   pos: new THREE.Vector3(0,0.5,0),
   velocity: new THREE.Vector3(),
-  speed: 4,
+  speed: 4.6,
+  height: 1.6,
+  radius: 0.45,
+  gravity: 9.8,
   yaw: 0,
   pitch: 0,
   hp: 1,
   alive: true,
   thirdPerson: false,
   weapon: 1,
-  jumpSpeed: 5,
-  canJump: true,
+  jumpSpeed: 5.5,
+  grounded: true,
+  groundHeight: 0.5,
+  coyoteTimer: 0,
+  wallNormal: new THREE.Vector3(),
+  wallTouchTimer: 0,
+  isSliding: false,
+  slideTimer: 0,
+  slideCooldown: 0,
+  slideDirection: new THREE.Vector3(),
   id: Math.random().toString(36).slice(2,9),
   name: 'me'
 };
@@ -695,6 +865,7 @@ window.addEventListener('keydown', e=>{
   keys[e.code]=true;
   if(e.code==='KeyY') player.thirdPerson = !player.thirdPerson;
   if(e.code==='KeyH' && !e.repeat){ toggleHighQualityMode(); }
+  if(e.code==='Space' && !e.repeat){ attemptJump(); }
   if(e.code.startsWith('Digit')){
     const digit = parseInt(e.code.slice(5), 10);
     if(!Number.isNaN(digit)){
@@ -706,9 +877,13 @@ window.addEventListener('keydown', e=>{
 window.addEventListener('keyup', e=>{
   keys[e.code]=false;
   if(e.code==='KeyQ'){ closeWeaponWheel(); }
+  if(e.code==='ShiftLeft' || e.code==='ShiftRight'){
+    if(player.isSliding && (!keys['ShiftLeft'] && !keys['ShiftRight'])){
+      player.isSliding = false;
+    }
+  }
 });
 window.addEventListener('keydown', e=>{ if(e.code==='Escape') document.exitPointerLock?.(); });
-window.addEventListener('keydown', e=>{ if(e.code==='Space' && player.canJump){ player.velocity.y = player.jumpSpeed; player.canJump=false; }});
 let isLocked = false;
 renderer.domElement.addEventListener('click', ()=> renderer.domElement.requestPointerLock?.());
 document.addEventListener('pointerlockchange', ()=>{
@@ -734,6 +909,27 @@ document.addEventListener('mousemove', e=>{
   player.pitch -= e.movementY*0.002;
   player.pitch = Math.max(-Math.PI/2+0.1, Math.min(Math.PI/2-0.1, player.pitch));
 });
+
+function attemptJump(){
+  const canGroundJump = player.grounded || player.coyoteTimer > 0;
+  if(canGroundJump){
+    player.velocity.y = player.jumpSpeed;
+    player.grounded = false;
+    player.coyoteTimer = 0;
+    player.isSliding = false;
+    player.slideTimer = 0;
+    return true;
+  }
+  if(player.wallTouchTimer > 0){
+    player.velocity.y = player.jumpSpeed * 1.05;
+    player.velocity.addScaledVector(player.wallNormal, player.speed * 2.4);
+    player.wallTouchTimer = 0;
+    player.isSliding = false;
+    player.slideTimer = 0;
+    return true;
+  }
+  return false;
+}
 
 /* Enemies & bullets */
 const enemies=[]; const enemyGroup = new THREE.Group(); scene.add(enemyGroup);
@@ -1015,7 +1211,17 @@ window.addEventListener('blur', ()=>{ shootState.down = false; });
 /* HUD update */
 let score = 0;
 function updateHUD(){ hud.textContent = `Score: ${score} | Enemies: ${enemies.length} | HP: ${player.hp} | Signaling: ${connectionLabel}`; }
-function updatePlayers(){ let txt = `Players: ${nameInput.value || player.name || 'me'}`; for(const id in remotePlayers){ const r = remotePlayers[id]; txt += '\n' + (r.name || id); } playersDiv.textContent = txt; }
+function updatePlayers(){
+  let txt = `Players: ${nameInput.value || player.name || 'me'}`;
+  let count = 1;
+  for(const id in remotePlayers){
+    const r = remotePlayers[id];
+    txt += '\n' + (r.name || id);
+    count += 1;
+  }
+  playersDiv.textContent = txt;
+  updatePopulationSign(count);
+}
 
 /* Game Over / Retry */
 const gameOverDiv = document.getElementById('gameOver');
@@ -1048,6 +1254,11 @@ let activeRoomCode = '';
 let connectionLabel = 'disconnected';
 let pendingHostMeta = null;
 let lobbyState = { list: [], selected: null };
+const SIGNALING_PING_INTERVAL = 5000;
+let signalingHeartbeat = null;
+let manualSignalingDisconnect = false;
+let manualDisconnectMessage = '';
+let lastSignalingPong = 0;
 
 /* pause when menu open */
 function setMenuOpen(open){
@@ -1061,6 +1272,8 @@ function setSignalingStatus(text, mode='info'){
     statusEl.style.color = '#8f8';
   } else if(mode === 'error'){
     statusEl.style.color = '#f88';
+  } else if(mode === 'warning'){
+    statusEl.style.color = '#ffd27f';
   } else if(mode === 'connecting'){
     statusEl.style.color = '#ffd27f';
   } else {
@@ -1073,6 +1286,52 @@ function logNetwork(msg){
   const now = new Date();
   const stamp = now.toLocaleTimeString();
   networkLogEl.textContent = `${stamp} — ${msg}\n${networkLogEl.textContent}`.slice(0, 4000);
+}
+
+function stopSignalingHeartbeat(){
+  if(signalingHeartbeat){
+    clearInterval(signalingHeartbeat);
+    signalingHeartbeat = null;
+  }
+}
+
+function startSignalingHeartbeat(){
+  stopSignalingHeartbeat();
+  signalingHeartbeat = setInterval(()=>{
+    if(!signalingSocket || signalingSocket.readyState !== WebSocket.OPEN) return;
+    try{ signalingSocket.send(JSON.stringify({ type:'ping' })); }
+    catch(e){}
+  }, SIGNALING_PING_INTERVAL);
+}
+
+function handleSignalingSocketClosed(wasManual, message){
+  stopSignalingHeartbeat();
+  if(signalingSocket){
+    signalingSocket.onopen = null;
+    signalingSocket.onclose = null;
+    signalingSocket.onerror = null;
+    signalingSocket.onmessage = null;
+    signalingSocket = null;
+  }
+  const note = message || (wasManual ? 'Disconnected.' : 'Signaling connection lost. Existing peers remain connected.');
+  manualSignalingDisconnect = false;
+  manualDisconnectMessage = '';
+  localPeerId = '';
+  pendingHostMeta = null;
+  if(wasManual){
+    activeRoomCode = '';
+    resetNetworkButtons();
+    setSignalingStatus('disconnected');
+    if(note) logNetwork(note);
+    closeAllPeers();
+    if(!lobbyBrowserEl.classList.contains('open')){
+      setMenuOpen(false);
+    }
+  } else {
+    resetNetworkButtons();
+    setSignalingStatus('relay disconnected', 'warning');
+    if(note) logNetwork(note);
+  }
 }
 
 function clampCapacity(value){
@@ -1177,11 +1436,18 @@ function selectLobby(code){
 async function refreshLobbyList(){
   const base = websocketToHttp((serverUrlInput.value || 'ws://localhost:3000').trim());
   try{
-    const res = await fetch(`${base}/rooms`, { cache: 'no-store' });
+    const res = await fetch(`${base}/rooms`, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if(!res.ok){
       throw new Error(`Server responded with ${res.status}`);
     }
-    const data = await res.json();
+    const raw = await res.text();
+    let data;
+    try{
+      data = JSON.parse(raw);
+    }catch(parseErr){
+      const snippet = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+      throw new Error(snippet ? `Invalid JSON: ${snippet}...` : 'Invalid JSON response');
+    }
     renderLobbyList(Array.isArray(data.rooms) ? data.rooms : []);
     logNetwork(`Loaded ${Array.isArray(data.rooms) ? data.rooms.length : 0} lobby entries`);
   }catch(err){
@@ -1271,20 +1537,14 @@ function closeAllPeers(reason){
 }
 
 function disconnectFromSignaling(message){
-  if(signalingSocket){
+  const note = message || 'Disconnected.';
+  manualSignalingDisconnect = true;
+  manualDisconnectMessage = note;
+  if(signalingSocket && (signalingSocket.readyState === WebSocket.OPEN || signalingSocket.readyState === WebSocket.CONNECTING || signalingSocket.readyState === WebSocket.CLOSING)){
     try{ signalingSocket.close(); }catch(e){}
+    return;
   }
-  signalingSocket = null;
-  localPeerId = '';
-  activeRoomCode = '';
-  pendingHostMeta = null;
-  resetNetworkButtons();
-  setSignalingStatus('disconnected');
-  if(message){ logNetwork(message); }
-  closeAllPeers();
-  if(!lobbyBrowserEl.classList.contains('open')){
-    setMenuOpen(false);
-  }
+  handleSignalingSocketClosed(true, note);
 }
 
 btnDisconnect.onclick = ()=>{
@@ -1310,6 +1570,9 @@ function beginSignaling(role, meta = null){
     return;
   }
   isHost = role === 'host';
+  manualSignalingDisconnect = false;
+  manualDisconnectMessage = '';
+  stopSignalingHeartbeat();
   if(isHost){
     const hostMeta = meta || gatherHostMeta();
     pendingHostMeta = { lobbyName: hostMeta.lobbyName || '', capacity: hostMeta.capacity || 10 };
@@ -1358,10 +1621,15 @@ function beginSignaling(role, meta = null){
       hello.capacity = pendingHostMeta.capacity || 10;
     }
     try{ signalingSocket.send(JSON.stringify(hello)); }catch(err){ logNetwork(`Failed to register: ${err.message || err}`); }
+    lastSignalingPong = performance.now();
+    startSignalingHeartbeat();
+    try{ signalingSocket.send(JSON.stringify({ type:'ping' })); }
+    catch(e){}
   };
   signalingSocket.onclose = ()=>{
-    logNetwork('Signaling connection closed.');
-    disconnectFromSignaling();
+    const wasManual = manualSignalingDisconnect;
+    const note = wasManual ? (manualDisconnectMessage || 'Disconnected.') : 'Signaling connection closed. Existing peers remain connected.';
+    handleSignalingSocketClosed(wasManual, note);
   };
   signalingSocket.onerror = err=>{
     let detail = '';
@@ -1413,6 +1681,10 @@ btnCloseLobbyBrowser.onclick = ()=> closeLobbyBrowser();
 btnJoinLobby.onclick = ()=> joinSelectedLobby();
 
 function handleSignalMessage(msg){
+  if(msg.type === 'pong'){
+    lastSignalingPong = performance.now();
+    return;
+  }
   if(msg.type === 'welcome'){
     localPeerId = msg.id;
     logNetwork(`Registered on server as ${localPeerId}`);
@@ -1642,13 +1914,71 @@ function updatePlayer(dt){
   if(keys['KeyA']) move.sub(right);
   if(keys['KeyD']) move.add(right);
   if(move.lengthSq()>0) move.normalize();
-  player.velocity.x = move.x * player.speed;
-  player.velocity.z = move.z * player.speed;
+  const wasGrounded = player.grounded;
+  const shiftHeld = keys['ShiftLeft'] || keys['ShiftRight'];
+  player.slideCooldown = Math.max(0, player.slideCooldown - dt);
+  if(shiftHeld && player.grounded && move.lengthSq()>0 && player.slideCooldown <= 0 && !player.isSliding){
+    player.isSliding = true;
+    player.slideTimer = 0.65;
+    player.slideDirection.copy(move);
+    player.slideCooldown = 0.9;
+  }
+  if(player.isSliding){
+    player.slideTimer -= dt;
+    const releaseSlide = !shiftHeld && player.slideTimer < 0.3;
+    if(player.slideTimer <= 0 || releaseSlide){
+      player.isSliding = false;
+    } else if(move.lengthSq()>0){
+      player.slideDirection.lerp(move, Math.min(1, dt*6));
+      if(player.slideDirection.lengthSq()>0){ player.slideDirection.normalize(); }
+    }
+  }
 
-  // gravity & integrate
-  player.velocity.y -= 9.8 * dt;
-  player.pos.add(player.velocity.clone().multiplyScalar(dt));
-  if(player.pos.y <= 0.5){ player.pos.y = 0.5; player.velocity.y = 0; player.canJump = true; }
+  const controlDir = player.isSliding ? player.slideDirection.clone() : move.clone();
+  const desiredSpeed = player.isSliding ? player.speed * 2.6 : player.speed * (player.grounded ? 1 : 0.75);
+  controlDir.multiplyScalar(desiredSpeed);
+  const accel = player.grounded ? 12 : 4;
+  player.velocity.x = THREE.MathUtils.damp(player.velocity.x, controlDir.x, accel, dt);
+  player.velocity.z = THREE.MathUtils.damp(player.velocity.z, controlDir.z, accel, dt);
+
+  const nextPos = player.pos.clone();
+  nextPos.x += player.velocity.x * dt;
+  nextPos.z += player.velocity.z * dt;
+  const collision = resolveWorldCollisions(nextPos);
+  player.pos.x = collision.position.x;
+  player.pos.z = collision.position.z;
+  if(collision.normal){
+    if(!player.grounded){
+      player.wallNormal.copy(collision.normal);
+      player.wallTouchTimer = 0.25;
+    } else {
+      player.wallTouchTimer = 0;
+    }
+    player.isSliding = false;
+  } else {
+    player.wallTouchTimer = Math.max(0, player.wallTouchTimer - dt);
+  }
+  if(player.wallTouchTimer <= 0){
+    player.wallNormal.set(0,0,0);
+  }
+
+  player.velocity.y -= player.gravity * dt;
+  player.pos.y += player.velocity.y * dt;
+
+  if(player.pos.y <= player.groundHeight){
+    if(player.velocity.y < 0) player.velocity.y = 0;
+    player.pos.y = player.groundHeight;
+    player.grounded = true;
+  } else {
+    player.grounded = false;
+  }
+
+  if(player.grounded){
+    player.coyoteTimer = 0.12;
+    player.wallTouchTimer = 0;
+  } else {
+    player.coyoteTimer = wasGrounded ? 0.12 : Math.max(0, player.coyoteTimer - dt);
+  }
 
   // camera
   if(player.thirdPerson){
@@ -1663,17 +1993,21 @@ function updatePlayer(dt){
     camera.lookAt(player.pos.x, player.pos.y + 0.7, player.pos.z);
   } else {
     alexMesh.visible = false;
-    camera.position.copy(player.pos.clone().add(new THREE.Vector3(0,0.7,0)));
+    const camHeight = player.isSliding ? 0.45 : 0.7;
+    camera.position.copy(player.pos.clone().add(new THREE.Vector3(0,camHeight,0)));
     camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
   }
 
   alexMesh.position.copy(player.pos);
+  if(player.isSliding){
+    alexMesh.position.y -= 0.15;
+  }
   alexMesh.rotation.y = player.yaw;
 }
 
 /* bullets & enemies update */
 function isPlayerJumping(){
-  return !player.canJump;
+  return !player.grounded;
 }
 
 function updateBullets(dt){
