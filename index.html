@@ -159,6 +159,9 @@
           <div class="menu-note">Get ready to pick how you want to jump in.</div>
         </div>
         <div id="playModeSelect" class="menu-subsection hidden">
+          <label class="menu-field">Room Code
+            <input type="text" id="menuRoomCode" placeholder="room-1234">
+          </label>
           <label class="menu-field">Player Name
             <input type="text" id="menuPlayerName" placeholder="Alex">
           </label>
@@ -625,6 +628,7 @@ const menuSections = Array.from(document.querySelectorAll('.menu-section'));
 const startButton = document.getElementById('btnStartGame');
 const playIntroEl = document.getElementById('playIntro');
 const playModeSelectEl = document.getElementById('playModeSelect');
+const menuRoomCodeInput = document.getElementById('menuRoomCode');
 const menuPlayerNameInput = document.getElementById('menuPlayerName');
 const btnPlaySolo = document.getElementById('btnPlaySolo');
 const btnPlayHost = document.getElementById('btnPlayHost');
@@ -703,6 +707,11 @@ function applyStoredNetworkDefaults(){
   }
   if(settings.room){
     roomInput.value = settings.room;
+    if(menuRoomCodeInput){
+      menuRoomCodeInput.value = settings.room;
+    }
+  } else if(menuRoomCodeInput){
+    menuRoomCodeInput.value = '';
   }
   if(settings.lobbyName){
     lobbyNameInput.value = settings.lobbyName;
@@ -713,6 +722,14 @@ function applyStoredNetworkDefaults(){
 }
 
 applyStoredNetworkDefaults();
+
+function syncRoomInputFromMenu(){
+  if(!menuRoomCodeInput) return '';
+  const raw = (menuRoomCodeInput.value || '').trim();
+  roomInput.value = raw;
+  savePersistedNetworkSettings({ room: raw });
+  return raw;
+}
 
 const aggregatedInput = {
   move: new THREE.Vector2(),
@@ -3025,11 +3042,23 @@ function showPlayIntro(){
 function showPlayModeSelect(){
   if(playIntroEl){ playIntroEl.classList.add('hidden'); }
   if(playModeSelectEl){ playModeSelectEl.classList.remove('hidden'); }
+  let focused = false;
+  if(menuRoomCodeInput){
+    if(!menuRoomCodeInput.value){
+      menuRoomCodeInput.value = roomInput.value || '';
+    }
+    if(!menuRoomCodeInput.value){
+      menuRoomCodeInput.focus();
+      focused = true;
+    }
+  }
   if(menuPlayerNameInput){
     if(!menuPlayerNameInput.value){
       menuPlayerNameInput.value = nameInput.value || player.name || '';
     }
-    menuPlayerNameInput.focus();
+    if(!focused){
+      menuPlayerNameInput.focus();
+    }
   }
 }
 
@@ -3117,6 +3146,10 @@ function initializeMenuUI(){
     });
   }
 
+  function updateRoomCodeFromMenu(){
+    return syncRoomInputFromMenu();
+  }
+
   function updateNameFromMenu(){
     const raw = (menuPlayerNameInput?.value || '').trim();
     const name = raw || 'Player';
@@ -3124,6 +3157,14 @@ function initializeMenuUI(){
     player.name = name;
     savePersistedNetworkSettings({name});
     updatePlayers();
+  }
+
+  if(menuRoomCodeInput){
+    if(!menuRoomCodeInput.value){
+      menuRoomCodeInput.value = roomInput.value || '';
+    }
+    menuRoomCodeInput.addEventListener('input', updateRoomCodeFromMenu);
+    menuRoomCodeInput.addEventListener('change', updateRoomCodeFromMenu);
   }
 
   if(menuPlayerNameInput){
@@ -3144,6 +3185,18 @@ function initializeMenuUI(){
       const fallback = (nameInput.value || player.name || 'Player').trim();
       player.name = fallback || 'Player';
       savePersistedNetworkSettings({name: player.name});
+    }
+    let joinedRoomCode = '';
+    if(menuRoomCodeInput){
+      joinedRoomCode = syncRoomInputFromMenu();
+      if(mode === 'join' && !joinedRoomCode){
+        alert('Enter a room code to join a lobby.');
+        menuRoomCodeInput.focus();
+        return;
+      }
+    } else if(mode === 'join' && !(roomInput.value || '').trim()){
+      alert('Enter a room code to join a lobby.');
+      return;
     }
     score = 0;
     gameHasStarted = true;
@@ -3434,6 +3487,9 @@ function ensureRoomCode(meta){
   } else {
     roomInput.value = `room-${Math.floor(Math.random()*9000 + 1000)}`;
   }
+  if(menuRoomCodeInput){
+    menuRoomCodeInput.value = roomInput.value;
+  }
 }
 
 function joinSelectedLobby(){
@@ -3443,6 +3499,9 @@ function joinSelectedLobby(){
     return;
   }
   roomInput.value = lobbyState.selected.code;
+  if(menuRoomCodeInput){
+    menuRoomCodeInput.value = lobbyState.selected.code;
+  }
   closeLobbyBrowser();
   beginSignaling('join');
 }
