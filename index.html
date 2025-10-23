@@ -1364,7 +1364,20 @@ function beginSignaling(role, meta = null){
     disconnectFromSignaling();
   };
   signalingSocket.onerror = err=>{
-    logNetwork(`Signaling error: ${err?.message || err}`);
+    let detail = '';
+    if(err && typeof err === 'object'){
+      if('message' in err && err.message){
+        detail = err.message;
+      } else if('type' in err && err.type){
+        detail = err.type;
+      } else {
+        try{ detail = JSON.stringify(err); }
+        catch(e){ detail = String(err); }
+      }
+    } else {
+      detail = String(err);
+    }
+    logNetwork(`Signaling error: ${detail}`);
   };
   signalingSocket.onmessage = ev=>{
     let msg;
