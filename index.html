@@ -322,6 +322,8 @@ signGroup.position.set(2.5,0,-14);
 environment.add(signGroup);
 addBoxCollider(signGroup.position.x - 0.5, 0, signGroup.position.z - 0.5, signGroup.position.x + 0.5, 2.6, signGroup.position.z + 0.5);
 
+let activeLobbyName = 'Alexland';
+
 function updatePopulationSign(count, lobbyName = activeLobbyName){
   if(!signCtx || !signTexture) return;
   const display = Math.max(1, Math.round(count));
@@ -426,7 +428,6 @@ const touchMoveEl = document.getElementById('touchMove');
 const touchLookEl = document.getElementById('touchLook');
 const touchButtons = Array.from(document.querySelectorAll('.touch-button'));
 let remotePlayers = {}; // peerId -> state
-let activeLobbyName = 'Alexland';
 
 const DEFAULT_SIGNALING_URL = 'wss://unswarming-etha-unscanned.ngrok-free.dev';
 const NETWORK_STORAGE_KEY = 'alex-network-settings';
