@@ -1048,6 +1048,11 @@ let activeRoomCode = '';
 let connectionLabel = 'disconnected';
 let pendingHostMeta = null;
 let lobbyState = { list: [], selected: null };
+const SIGNALING_PING_INTERVAL = 5000;
+let signalingHeartbeat = null;
+let manualSignalingDisconnect = false;
+let manualDisconnectMessage = '';
+let lastSignalingPong = 0;
 
 /* pause when menu open */
 function setMenuOpen(open){
@@ -1061,6 +1066,8 @@ function setSignalingStatus(text, mode='info'){
     statusEl.style.color = '#8f8';
   } else if(mode === 'error'){
     statusEl.style.color = '#f88';
+  } else if(mode === 'warning'){
+    statusEl.style.color = '#ffd27f';
   } else if(mode === 'connecting'){
     statusEl.style.color = '#ffd27f';
   } else {
@@ -1073,6 +1080,52 @@ function logNetwork(msg){
   const now = new Date();
   const stamp = now.toLocaleTimeString();
   networkLogEl.textContent = `${stamp} — ${msg}\n${networkLogEl.textContent}`.slice(0, 4000);
+}
+
+function stopSignalingHeartbeat(){
+  if(signalingHeartbeat){
+    clearInterval(signalingHeartbeat);
+    signalingHeartbeat = null;
+  }
+}
+
+function startSignalingHeartbeat(){
+  stopSignalingHeartbeat();
+  signalingHeartbeat = setInterval(()=>{
+    if(!signalingSocket || signalingSocket.readyState !== WebSocket.OPEN) return;
+    try{ signalingSocket.send(JSON.stringify({ type:'ping' })); }
+    catch(e){}
+  }, SIGNALING_PING_INTERVAL);
+}
+
+function handleSignalingSocketClosed(wasManual, message){
+  stopSignalingHeartbeat();
+  if(signalingSocket){
+    signalingSocket.onopen = null;
+    signalingSocket.onclose = null;
+    signalingSocket.onerror = null;
+    signalingSocket.onmessage = null;
+    signalingSocket = null;
+  }
+  const note = message || (wasManual ? 'Disconnected.' : 'Signaling connection lost. Existing peers remain connected.');
+  manualSignalingDisconnect = false;
+  manualDisconnectMessage = '';
+  localPeerId = '';
+  pendingHostMeta = null;
+  if(wasManual){
+    activeRoomCode = '';
+    resetNetworkButtons();
+    setSignalingStatus('disconnected');
+    if(note) logNetwork(note);
+    closeAllPeers();
+    if(!lobbyBrowserEl.classList.contains('open')){
+      setMenuOpen(false);
+    }
+  } else {
+    resetNetworkButtons();
+    setSignalingStatus('relay disconnected', 'warning');
+    if(note) logNetwork(note);
+  }
 }
 
 function clampCapacity(value){
@@ -1271,20 +1324,14 @@ function closeAllPeers(reason){
 }
 
 function disconnectFromSignaling(message){
-  if(signalingSocket){
+  const note = message || 'Disconnected.';
+  manualSignalingDisconnect = true;
+  manualDisconnectMessage = note;
+  if(signalingSocket && (signalingSocket.readyState === WebSocket.OPEN || signalingSocket.readyState === WebSocket.CONNECTING || signalingSocket.readyState === WebSocket.CLOSING)){
     try{ signalingSocket.close(); }catch(e){}
+    return;
   }
-  signalingSocket = null;
-  localPeerId = '';
-  activeRoomCode = '';
-  pendingHostMeta = null;
-  resetNetworkButtons();
-  setSignalingStatus('disconnected');
-  if(message){ logNetwork(message); }
-  closeAllPeers();
-  if(!lobbyBrowserEl.classList.contains('open')){
-    setMenuOpen(false);
-  }
+  handleSignalingSocketClosed(true, note);
 }
 
 btnDisconnect.onclick = ()=>{
@@ -1310,6 +1357,9 @@ function beginSignaling(role, meta = null){
     return;
   }
   isHost = role === 'host';
+  manualSignalingDisconnect = false;
+  manualDisconnectMessage = '';
+  stopSignalingHeartbeat();
   if(isHost){
     const hostMeta = meta || gatherHostMeta();
     pendingHostMeta = { lobbyName: hostMeta.lobbyName || '', capacity: hostMeta.capacity || 10 };
@@ -1358,10 +1408,15 @@ function beginSignaling(role, meta = null){
       hello.capacity = pendingHostMeta.capacity || 10;
     }
     try{ signalingSocket.send(JSON.stringify(hello)); }catch(err){ logNetwork(`Failed to register: ${err.message || err}`); }
+    lastSignalingPong = performance.now();
+    startSignalingHeartbeat();
+    try{ signalingSocket.send(JSON.stringify({ type:'ping' })); }
+    catch(e){}
   };
   signalingSocket.onclose = ()=>{
-    logNetwork('Signaling connection closed.');
-    disconnectFromSignaling();
+    const wasManual = manualSignalingDisconnect;
+    const note = wasManual ? (manualDisconnectMessage || 'Disconnected.') : 'Signaling connection closed. Existing peers remain connected.';
+    handleSignalingSocketClosed(wasManual, note);
   };
   signalingSocket.onerror = err=>{
     let detail = '';
@@ -1413,6 +1468,10 @@ btnCloseLobbyBrowser.onclick = ()=> closeLobbyBrowser();
 btnJoinLobby.onclick = ()=> joinSelectedLobby();
 
 function handleSignalMessage(msg){
+  if(msg.type === 'pong'){
+    lastSignalingPong = performance.now();
+    return;
+  }
   if(msg.type === 'welcome'){
     localPeerId = msg.id;
     logNetwork(`Registered on server as ${localPeerId}`);

@@ -124,6 +124,11 @@ console.log(`Signaling server listening on ws://0.0.0.0:${PORT}`);
 
 wss.on('connection', ws=>{
   ws.meta = null;
+  ws.isAlive = true;
+
+  ws.on('pong', ()=>{
+    ws.isAlive = true;
+  });
 
   ws.on('message', raw=>{
     let msg;
@@ -131,6 +136,12 @@ wss.on('connection', ws=>{
       msg = JSON.parse(raw.toString());
     }catch(err){
       send(ws, { type:'error', message:'Invalid JSON' });
+      return;
+    }
+
+    if(msg.type === 'ping'){
+      ws.isAlive = true;
+      send(ws, { type: 'pong', now: Date.now() });
       return;
     }
 
@@ -236,4 +247,22 @@ wss.on('connection', ws=>{
 server.listen(PORT, ()=>{
   console.log(`HTTP lobby listing available at http://0.0.0.0:${PORT}/rooms`);
 });
+
+const heartbeatInterval = setInterval(()=>{
+  wss.clients.forEach(client=>{
+    if(client.isAlive === false){
+      try{ client.terminate(); }
+      catch(e){ console.error('Failed to terminate stale client', e); }
+      return;
+    }
+    client.isAlive = false;
+    try{ client.ping(); }
+    catch(e){
+      try{ client.terminate(); }
+      catch(inner){ console.error('Failed to terminate client after ping error', inner); }
+    }
+  });
+}, 15000);
+
+wss.on('close', ()=> clearInterval(heartbeatInterval));
 
