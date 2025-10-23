@@ -73,6 +73,14 @@
   .menu-section button{padding:12px 26px;border-radius:999px;font-size:15px;font-weight:600;background:#3da6ff;border:none;color:#fff;cursor:pointer;box-shadow:0 8px 18px rgba(0,0,0,0.35);transition:transform 0.15s}
   .menu-section button:hover{transform:translateY(-1px)}
   .menu-section label{display:flex;align-items:center;gap:12px;font-size:14px}
+  .menu-subsection{display:flex;flex-direction:column;gap:16px;align-items:center}
+  .menu-subsection.hidden{display:none}
+  .menu-field{flex-direction:column;align-items:flex-start;width:100%;max-width:260px}
+  .menu-field input{width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);background:rgba(5,12,20,0.65);color:#eaf6ff}
+  .menu-mode-buttons{display:flex;flex-direction:column;gap:10px;width:100%;max-width:260px}
+  .menu-mode-buttons button{width:100%}
+  .menu-link{background:transparent!important;border:1px solid rgba(124,196,255,0.4)!important;color:#7cc4ff!important;box-shadow:none!important}
+  .menu-link:hover{transform:none}
   .menu-color-preview{width:54px;height:54px;border-radius:12px;border:2px solid rgba(255,255,255,0.35);box-shadow:0 6px 18px rgba(0,0,0,0.4)}
   .menu-note{font-size:12px;opacity:0.7}
   .menu-toggle{display:flex;align-items:center;gap:10px;font-size:14px}
@@ -98,7 +106,7 @@
 
   <div class="instructions">
     <strong>Controls</strong><br>
-    WASD / Left Stick - move<br>Mouse / Right Stick - look<br>Click / RT / Touch Shoot - fire (hold to spray)<br>Space / A - jump & double jump (hold near walls to climb)<br>Shift / B - slide boost (tap in air to vault)<br>Ctrl / X - forward dash<br>F - punch up close<br>Y / View - toggle camera<br>Esc - release mouse<br>1-4 - quick swap weapons<br>Hold Q / LT / Touch Wheel - weapon wheel<br>H - toggle high quality<br>Touch players: use the on-screen sticks & buttons<br>Weapons: 1 Pulse | 2 Rocket | 3 Scatter | 4 Pee Stream
+    WASD / Left Stick - move<br>Mouse / Right Stick - look<br>Click / RT / Touch Shoot - fire (hold to spray)<br>Space / A - jump & double jump (hold near walls to climb)<br>Shift / B - slide boost (tap in air to vault)<br>Ctrl / X - forward dash<br>F - punch up close<br>Y / View - toggle camera<br>Esc - pause / release mouse<br>1-4 - quick swap weapons<br>Hold Q / LT / Touch Wheel - weapon wheel<br>H - toggle high quality<br>Touch players: use the on-screen sticks & buttons<br>Weapons: 1 Pulse | 2 Rocket | 3 Scatter | 4 Pee Stream
   </div>
 
   <div class="crosshair"></div>
@@ -115,7 +123,7 @@
 
   <div id="network">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <label>Name: <input id="nameInput" type="text" placeholder="Your name" style="width:140px"></label>
+      <label style="display:none">Name: <input id="nameInput" type="text" placeholder="Your name" style="width:140px"></label>
       <label>Server URL: <input id="serverUrl" type="text" placeholder="wss://example.ngrok-free.app" value="wss://unswarming-etha-unscanned.ngrok-free.dev" style="width:210px"></label>
       <label>Room Code: <input id="roomCode" type="text" placeholder="my-room" style="width:110px"></label>
       <button id="btnHost">Quick Host</button>
@@ -146,8 +154,22 @@
         <button class="menu-tab" data-tab="options">Options</button>
       </div>
       <div class="menu-section active" data-content="play">
-        <button id="btnStartGame">Play</button>
-        <div class="menu-note">Host or join a lobby after jumping in!</div>
+        <div id="playIntro" class="menu-subsection">
+          <button id="btnStartGame">Play</button>
+          <div class="menu-note">Get ready to pick how you want to jump in.</div>
+        </div>
+        <div id="playModeSelect" class="menu-subsection hidden">
+          <label class="menu-field">Player Name
+            <input type="text" id="menuPlayerName" placeholder="Alex">
+          </label>
+          <div class="menu-note">Choose singleplayer or hop online.</div>
+          <div class="menu-mode-buttons">
+            <button id="btnPlaySolo">Singleplayer</button>
+            <button id="btnPlayHost">Create Lobby</button>
+            <button id="btnPlayJoin">Join Lobby</button>
+          </div>
+          <button id="btnPlayBack" class="menu-link">Back</button>
+        </div>
       </div>
       <div class="menu-section" data-content="customize">
         <label>Cube Color
@@ -157,9 +179,19 @@
         <div class="menu-note">Saved automatically (cookies).</div>
       </div>
       <div class="menu-section" data-content="options">
-        <label class="menu-toggle"><input type="checkbox" id="soundToggle" checked> Sound Effects</label>
-        <div class="menu-note">Toggle weapon and hit sounds.</div>
+        <label class="menu-toggle"><input type="checkbox" id="alexlandToggle"> Alexland Mode</label>
+        <div class="menu-note">Replace every texture with the victory flip gif.</div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="pauseMenu" class="menu-screen" style="display:none">
+  <div class="menu-panel" style="gap:16px;min-width:260px">
+    <h1>Paused</h1>
+    <div class="menu-subsection" style="width:100%">
+      <button id="btnResume">Resume</button>
+      <button id="btnPauseMenu" class="menu-link">Main Menu</button>
     </div>
   </div>
 </div>
@@ -220,6 +252,108 @@ const dir = new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(-10,10,5)
 
 const environment = new THREE.Group();
 scene.add(environment);
+
+let alexlandTexture = null;
+const alexlandMaterials = new Map();
+let alexlandMode = false;
+
+function loadAlexlandTexture(){
+  if(alexlandTexture) return alexlandTexture;
+  const loader = new THREE.TextureLoader();
+  alexlandTexture = loader.load('backflip.gif', tex=>{
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(4,4);
+  });
+  if(alexlandTexture){
+    alexlandTexture.wrapS = alexlandTexture.wrapT = THREE.RepeatWrapping;
+    alexlandTexture.repeat.set(4,4);
+    alexlandTexture.minFilter = THREE.LinearFilter;
+    alexlandTexture.magFilter = THREE.LinearFilter;
+  }
+  return alexlandTexture;
+}
+
+function registerForAlexland(object){
+  if(!object) return;
+  object.traverse(node=>{
+    if(node.isMesh){
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+      mats.forEach(mat=>{
+        if(!mat || !mat.isMaterial) return;
+        if(!alexlandMaterials.has(mat)){
+          alexlandMaterials.set(mat, {
+            color: mat.color ? mat.color.clone() : null,
+            emissive: mat.emissive ? mat.emissive.clone() : null,
+            map: mat.map || null,
+            emissiveMap: mat.emissiveMap || null
+          });
+        }
+        if(alexlandMode){
+          applyAlexlandMaterial(mat);
+        }
+      });
+    }
+  });
+}
+
+function refreshAlexlandBaseline(object){
+  if(!object) return;
+  object.traverse(node=>{
+    if(node.isMesh){
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+      mats.forEach(mat=>{
+        if(!mat || !mat.isMaterial) return;
+        const record = alexlandMaterials.get(mat);
+        if(record){
+          record.color = mat.color ? mat.color.clone() : null;
+          record.emissive = mat.emissive ? mat.emissive.clone() : null;
+          if(!alexlandMode){
+            record.map = mat.map || null;
+            record.emissiveMap = mat.emissiveMap || null;
+          }
+          if(alexlandMode){
+            applyAlexlandMaterial(mat);
+          }
+        }
+      });
+    }
+  });
+}
+
+function applyAlexlandMaterial(mat){
+  const tex = loadAlexlandTexture();
+  if(tex){
+    mat.map = tex;
+  }
+  if(mat.color){ mat.color.setHex(0xffffff); }
+  if(mat.emissive){ mat.emissive.setHex(0xffffff); }
+  mat.emissiveMap = null;
+  mat.needsUpdate = true;
+}
+
+function restoreAlexlandMaterial(mat){
+  const record = alexlandMaterials.get(mat);
+  if(!record) return;
+  mat.map = record.map || null;
+  if(mat.color && record.color){ mat.color.copy(record.color); }
+  if(mat.emissive && record.emissive){ mat.emissive.copy(record.emissive); }
+  mat.emissiveMap = record.emissiveMap || null;
+  mat.needsUpdate = true;
+}
+
+function setAlexlandMode(enabled){
+  alexlandMode = !!enabled;
+  if(alexlandToggleInput){
+    alexlandToggleInput.checked = alexlandMode;
+  }
+  alexlandMaterials.forEach((_, mat)=>{
+    if(alexlandMode){
+      applyAlexlandMaterial(mat);
+    } else {
+      restoreAlexlandMaterial(mat);
+    }
+  });
+}
 
 const staticColliders = [];
 function addBoxCollider(minX, minY, minZ, maxX, maxY, maxZ){
@@ -408,6 +542,7 @@ function updatePopulationSign(count, lobbyName = activeLobbyName){
   signTexture.needsUpdate = true;
 }
 updatePopulationSign(1, activeLobbyName);
+registerForAlexland(environment);
 
 function setActiveLobbyName(name){
   activeLobbyName = (name && name.trim()) ? name.trim() : 'Alexland';
@@ -488,17 +623,27 @@ const mainMenuEl = document.getElementById('mainMenu');
 const menuTabs = Array.from(document.querySelectorAll('.menu-tab'));
 const menuSections = Array.from(document.querySelectorAll('.menu-section'));
 const startButton = document.getElementById('btnStartGame');
+const playIntroEl = document.getElementById('playIntro');
+const playModeSelectEl = document.getElementById('playModeSelect');
+const menuPlayerNameInput = document.getElementById('menuPlayerName');
+const btnPlaySolo = document.getElementById('btnPlaySolo');
+const btnPlayHost = document.getElementById('btnPlayHost');
+const btnPlayJoin = document.getElementById('btnPlayJoin');
+const btnPlayBack = document.getElementById('btnPlayBack');
 const cubeColorInput = document.getElementById('cubeColor');
 const cubePreviewEl = document.getElementById('cubePreview');
-const soundToggleInput = document.getElementById('soundToggle');
+const alexlandToggleInput = document.getElementById('alexlandToggle');
 const waveBannerEl = document.getElementById('waveBanner');
+const pauseMenuEl = document.getElementById('pauseMenu');
+const btnResume = document.getElementById('btnResume');
+const btnPauseMenu = document.getElementById('btnPauseMenu');
 let remotePlayers = {}; // peerId -> state
 
 const DEFAULT_SIGNALING_URL = 'wss://unswarming-etha-unscanned.ngrok-free.dev';
 const NETWORK_STORAGE_KEY = 'alex-network-settings';
 let persistedNetworkSettings = loadPersistedNetworkSettings();
 const COLOR_COOKIE_KEY = 'alexCubeColor';
-const SOUND_COOKIE_KEY = 'alexSoundEffects';
+const ALEXLAND_COOKIE_KEY = 'alexlandMode';
 
 function readCookie(name){
   if(typeof document === 'undefined' || !name) return null;
@@ -552,6 +697,9 @@ function applyStoredNetworkDefaults(){
   serverUrlInput.value = server;
   if(settings.name){
     nameInput.value = settings.name;
+    if(menuPlayerNameInput){
+      menuPlayerNameInput.value = settings.name;
+    }
   }
   if(settings.room){
     roomInput.value = settings.room;
@@ -644,49 +792,9 @@ const touchState = {
   justPunched: false
 };
 
-let soundEffectsEnabled = true;
 let customCubeColorHex = '#4da6ff';
-let audioCtx = null;
 
-function ensureAudioContext(){
-  if(typeof window === 'undefined') return null;
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if(!AudioCtx) return null;
-  if(!audioCtx){
-    audioCtx = new AudioCtx();
-  }
-  if(audioCtx.state === 'suspended'){ audioCtx.resume?.(); }
-  return audioCtx;
-}
-
-function playSound(name, options={}){
-  if(!soundEffectsEnabled) return;
-  const ctx = ensureAudioContext();
-  if(!ctx) return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  let frequency = 440;
-  let duration = 0.18;
-  let type = 'square';
-  switch(name){
-    case 'shoot': frequency = 520; duration = 0.08; type = 'square'; break;
-    case 'hit': frequency = 180; duration = 0.15; type = 'sawtooth'; break;
-    case 'punch': frequency = 150; duration = 0.12; type = 'triangle'; break;
-    case 'wave': frequency = 640; duration = 0.35; type = 'sine'; break;
-    case 'spawn': frequency = 340; duration = 0.2; type = 'triangle'; break;
-  }
-  if(options.pitch){ frequency *= options.pitch; }
-  osc.type = type;
-  osc.frequency.value = frequency;
-  const now = ctx.currentTime;
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.32, now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(now);
-  osc.stop(now + duration + 0.05);
-}
+function playSound(){ /* sound effects disabled */ }
 
 function updateCubePreview(hex){
   if(cubePreviewEl){
@@ -1272,66 +1380,6 @@ function buildAccessoryGroup(def, humanoid){
   return group;
 }
 
-function applyHumanoidAccessories(root, accessories){
-  if(!root || !root.userData || !root.userData.humanoid) return;
-  clearHumanoidAccessories(root);
-  const humanoid = root.userData.humanoid;
-  const defs = cloneAccessories(accessories);
-  const created = [];
-  for(const def of defs){
-    const group = buildAccessoryGroup(def, humanoid);
-    if(group){
-      created.push(group);
-    }
-  }
-  root.userData.accessoryGroups = created;
-  root.userData.appliedAccessories = defs;
-}
-
-function applyRobloxAppearance(root, profile={}, options={}){
-  if(!root) return;
-  const fallbackAccessories = cloneAccessories(profile?.fallback?.accessories || []);
-  const applyAppearance = (appearance, source)=>{
-    if(!appearance) return;
-    const palette = combinePalettes(profile?.fallback, appearance.palette || appearance);
-    applyHumanoidPalette(root, palette);
-    const acc = appearance.accessories ? cloneAccessories(appearance.accessories) : fallbackAccessories;
-    applyHumanoidAccessories(root, acc);
-    root.userData.robloxAppearance = { palette, accessories: acc, source };
-    if(typeof options.onApplied === 'function'){
-      try{ options.onApplied(root, root.userData.robloxAppearance); }
-      catch(err){ console.warn('Roblox appearance callback failed', err); }
-    }
-  };
-  if(profile?.fallback){
-    applyAppearance({ palette: profile.fallback, accessories: fallbackAccessories }, 'fallback');
-  }
-  if(profile?.userId && typeof fetch === 'function'){
-    fetchRobloxAvatar(profile.userId).then(data=>{
-      const built = buildAppearanceFromAvatarData(data, profile?.fallback);
-      applyAppearance(built, 'roblox');
-    }).catch(err=>{
-      console.warn('Failed to load Roblox avatar', profile.userId, err);
-    });
-  }
-}
-
-function decorateTemplateWithRoblox(template, profile, options={}){
-  if(!template) return template;
-  const baseSetup = template.userData?.setupClone;
-  template.userData = template.userData || {};
-  template.userData.setupClone = clone=>{
-    if(baseSetup) baseSetup(clone);
-    applyRobloxAppearance(clone, profile, options);
-  };
-  return template;
-}
-
-function createRobloxHumanoidTemplate(profile, options={}){
-  const base = createHumanoidTemplate(options);
-  return decorateTemplateWithRoblox(base, profile, options);
-}
-
 let armRig = null;
 
 const weaponWheelState = {
@@ -1360,89 +1408,30 @@ function cloneTemplate(template){
   if(typeof setup === 'function'){
     setup(clone);
   }
+  registerForAlexland(clone);
   return clone;
 }
 
 function createHumanoidTemplate(options={}){
-  const { primary=0x6699ff, secondary=0x24355b, skin=0xffd7c4, accent=0xf5f1e6, height=1.6, detail='standard' } = options;
+  const { primary=0x6699ff, secondary=0x24355b, height=1.6, type='player' } = options;
   const root = new THREE.Group();
-  const hips = new THREE.Group(); hips.name = 'hips'; hips.position.y = 0.76; root.add(hips);
-  const torso = new THREE.Group(); torso.name = 'torso'; torso.position.y = 0.36; hips.add(torso);
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.48,0.64,0.32), new THREE.MeshStandardMaterial({color:primary, roughness:0.6, metalness:0.12, flatShading:true})); chest.name = 'chest';
-  chest.position.y = 0.32; chest.name = 'chest'; torso.add(chest);
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.18,0.34), new THREE.MeshStandardMaterial({color:secondary, roughness:0.72, flatShading:true}));
-  belt.position.y = 0.05; torso.add(belt);
-  belt.name = 'belt';
-  const head = new THREE.Group(); head.name = 'head'; head.position.y = 0.7; torso.add(head);
-  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32,0.32,0.32), new THREE.MeshStandardMaterial({color:skin, roughness:0.45, flatShading:true}));
-  headMesh.name = 'headMesh';
-  headMesh.position.y = 0.16; head.add(headMesh);
-  const eyeMat = new THREE.MeshStandardMaterial({color:0x1a1a1a, emissive:0x131313, roughness:0.3});
-  const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.01), eyeMat); leftEye.position.set(-0.08,0.04,0.16); leftEye.name = 'leftEye'; head.add(leftEye);
-  const rightEye = leftEye.clone(); rightEye.position.x = 0.08; rightEye.name = 'rightEye'; head.add(rightEye);
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.04,0.01), new THREE.MeshStandardMaterial({color:secondary, roughness:0.4}));
-  brow.position.set(0,0.12,0.15); head.add(brow);
-  brow.name = 'brow';
+  const bodyMaterial = new THREE.MeshStandardMaterial({color:primary, roughness:0.7, metalness:0.1});
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,0.8,0.8), bodyMaterial);
+  body.position.y = 0.4;
+  body.name = 'cubeBody';
+  root.add(body);
 
-  function makeLimb(name, isArm){
-    const group = new THREE.Group();
-    group.name = name;
-    const length = isArm ? 0.62 : 0.74;
-    group.userData.length = length;
-    const width = isArm ? 0.2 : 0.26;
-    const geom = new THREE.BoxGeometry(width, length, width);
-    const mat = isArm ? new THREE.MeshStandardMaterial({color:skin, roughness:0.6, flatShading:true}) : new THREE.MeshStandardMaterial({color:secondary, roughness:0.72, flatShading:true});
-    const limb = new THREE.Mesh(geom, mat);
-    limb.name = `${name}Mesh`;
-    limb.position.y = -length/2;
-    group.add(limb);
-    return group;
-  }
+  const trimMaterial = new THREE.MeshStandardMaterial({color:secondary, roughness:0.6, metalness:0.08});
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.2,0.6), trimMaterial);
+  cap.position.y = 0.85;
+  cap.name = 'cubeCap';
+  root.add(cap);
 
-  const leftArm = makeLimb('leftArm', true); leftArm.position.set(-0.32,0.55,0); torso.add(leftArm);
-  const rightArm = makeLimb('rightArm', true); rightArm.position.set(0.32,0.55,0); torso.add(rightArm);
-  const leftLeg = makeLimb('leftLeg', false); leftLeg.position.set(-0.2,0.02,0); hips.add(leftLeg);
-  const rightLeg = makeLimb('rightLeg', false); rightLeg.position.set(0.2,0.02,0); hips.add(rightLeg);
-  const bootMat = new THREE.MeshStandardMaterial({color:accent, roughness:0.5});
-  [leftLeg, rightLeg].forEach(leg=>{
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.1,0.36), bootMat);
-    boot.position.set(0, -leg.userData.length + 0.08, 0.08);
-    boot.name = leg === leftLeg ? 'leftBoot' : 'rightBoot';
-    leg.add(boot);
-  });
-  const shoulderMat = new THREE.MeshStandardMaterial({color:secondary, roughness:0.6, flatShading:true});
-  const shoulderGeom = new THREE.BoxGeometry(0.22,0.22,0.22);
-  const leftShoulder = new THREE.Mesh(shoulderGeom, shoulderMat);
-  leftShoulder.position.set(-0.32,0.64,0);
-  leftShoulder.name = 'leftShoulder';
-  torso.add(leftShoulder);
-  const rightShoulder = leftShoulder.clone();
-  rightShoulder.position.x = 0.32;
-  rightShoulder.name = 'rightShoulder';
-  torso.add(rightShoulder);
-
-  if(detail === 'high'){
-    const overlay = new THREE.Mesh(new THREE.BoxGeometry(0.52,0.68,0.34), new THREE.MeshStandardMaterial({color:primary, roughness:0.5, metalness:0.12}));
-    overlay.position.y = 0.32;
-    overlay.name = 'torsoOverlay';
-    torso.add(overlay);
-    const sleeveGeom = new THREE.BoxGeometry(0.22, leftArm.userData.length * 0.7, 0.22);
-    const leftSleeve = new THREE.Mesh(sleeveGeom, new THREE.MeshStandardMaterial({color:primary, roughness:0.55, flatShading:true}));
-    leftSleeve.position.y = -leftArm.userData.length * 0.35;
-    leftSleeve.name = 'leftSleeve';
-    leftArm.add(leftSleeve);
-    const rightSleeve = leftSleeve.clone();
-    rightSleeve.name = 'rightSleeve';
-    rightArm.add(rightSleeve);
-    const kneeGeom = new THREE.BoxGeometry(0.28,0.22,0.18);
-    const leftKnee = new THREE.Mesh(kneeGeom, new THREE.MeshStandardMaterial({color:accent, roughness:0.4, flatShading:true}));
-    leftKnee.position.set(0,-leftLeg.userData.length + 0.28,0.12);
-    leftKnee.name = 'leftKnee';
-    leftLeg.add(leftKnee);
-    const rightKnee = leftKnee.clone();
-    rightKnee.name = 'rightKnee';
-    rightLeg.add(rightKnee);
-  }
+  const faceMaterial = new THREE.MeshStandardMaterial({color:0xf2f2f2, emissive:0x222222, emissiveIntensity:0.3});
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.42,0.42), faceMaterial);
+  face.position.set(0,0.42,0.41);
+  face.name = 'cubeFace';
+  root.add(face);
 
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
@@ -1450,134 +1439,47 @@ function createHumanoidTemplate(options={}){
     const scale = height / size.y;
     root.scale.setScalar(scale);
   }
-  const scaled = new THREE.Box3().setFromObject(root);
-  const offset = scaled.min;
-  root.position.y -= offset.y;
 
-  root.userData.humanoidOptions = {...options, primary, secondary, skin, accent, height, detail};
+  root.userData.cubeOptions = { primary, secondary, type, height };
   root.userData.setupClone = clone=>{
-    const parts = {};
-    const detailNodes = {};
-    clone.traverse(node=>{
-      if(node.name && ['hips','torso','head','leftArm','rightArm','leftLeg','rightLeg'].includes(node.name)){
-        parts[node.name] = node;
-      }
-      if(node.name && ['belt','leftBoot','rightBoot','leftShoulder','rightShoulder','leftSleeve','rightSleeve','torsoOverlay','leftKnee','rightKnee','brow','leftEye','rightEye'].includes(node.name)){
-        detailNodes[node.name] = node;
-      }
-    });
-    const baseRot = {};
-    const basePos = {};
-    for(const key in parts){
-      const n = parts[key];
-      baseRot[key] = n.rotation.clone();
-      basePos[key] = n.position.clone();
-    }
-    clone.userData.humanoid = { parts, baseRot, basePos, detailNodes, state:{phase:Math.random()*Math.PI*2}, options:{...options, primary, secondary, skin, accent, detail} };
+    const parts = {
+      body: clone.getObjectByName('cubeBody'),
+      cap: clone.getObjectByName('cubeCap'),
+      face: clone.getObjectByName('cubeFace')
+    };
+    clone.userData.cubeParts = parts;
   };
   return root;
 }
 
 function createLowEnemyTemplate(){
   return createHumanoidTemplate({
-    detail:'standard',
     height:1.68,
     type:'enemy',
     primary:0xd04f4f,
-    secondary:0x401919,
-    skin:0xffe0c8,
-    accent:0xf2c36b
+    secondary:0x401919
   });
 }
 
 function createLowPlayerTemplate(){
   const primary = new THREE.Color(customCubeColorHex || '#4da6ff').getHex();
   return createHumanoidTemplate({
-    detail:'standard',
     height:1.7,
     type:'player',
     primary,
-    secondary:0x24355b,
-    skin:0xffd7c4,
-    accent:0xffffff
+    secondary:0x24355b
   });
 }
 
 function updateHumanoidRig(root, anim={}, dt=0){
-  if(!root || !root.userData || !root.userData.humanoid) return;
-  const data = root.userData.humanoid;
-  const parts = data.parts || {};
-  const baseRot = data.baseRot || {};
-  const basePos = data.basePos || {};
-  data.state = data.state || {phase:0};
-  const state = data.state;
-  const mode = anim.mode || 'idle';
-  const speed = anim.speed ?? 0;
-  const delta = dt || 0.016;
-  const frequency = (mode === 'run' || mode === 'sprint') ? 8.5 + speed*2 : mode === 'climb' ? 6.2 : 4.2;
-  state.phase += delta * frequency;
-
-  for(const key in parts){
-    const node = parts[key];
-    const base = baseRot[key];
-    const pos = basePos[key];
-    if(base){ node.rotation.set(base.x, base.y, base.z); }
-    if(pos){ node.position.set(pos.x, pos.y, pos.z); }
-  }
-
-  const hips = parts.hips;
-  const torso = parts.torso;
-  const head = parts.head;
-  const leftArm = parts.leftArm;
-  const rightArm = parts.rightArm;
-  const leftLeg = parts.leftLeg;
-  const rightLeg = parts.rightLeg;
-
-  const swing = Math.sin(state.phase);
-  const counter = Math.sin(state.phase + Math.PI);
-
-  if(mode === 'run' || mode === 'sprint'){
-    const amp = (mode === 'sprint' ? 1.1 : 0.85) * Math.max(0.45, speed);
-    if(leftArm){ leftArm.rotation.x += counter * 0.9 * amp; leftArm.rotation.z += 0.15 * Math.cos(state.phase*0.5); }
-    if(rightArm){ rightArm.rotation.x += swing * 0.9 * amp; rightArm.rotation.z -= 0.15 * Math.cos(state.phase*0.5); }
-    if(leftLeg){ leftLeg.rotation.x += swing * 1.1 * amp; }
-    if(rightLeg){ rightLeg.rotation.x += counter * 1.1 * amp; }
-    if(torso){ torso.rotation.z += Math.sin(state.phase)*0.05*amp; torso.rotation.x += -Math.abs(Math.sin(state.phase))*0.05*amp; }
-    if(hips){ hips.position.y += Math.abs(Math.cos(state.phase))*0.05*amp; }
-    if(head){ head.rotation.y += Math.sin(state.phase*0.4)*0.05; }
-  } else if(mode === 'slide'){
-    if(hips){ hips.position.y -= 0.28; hips.rotation.x = -0.4; }
-    if(leftLeg){ leftLeg.rotation.x = -0.6; }
-    if(rightLeg){ rightLeg.rotation.x = -0.25; }
-    if(leftArm){ leftArm.rotation.x = -0.5; leftArm.rotation.z = 1.1; }
-    if(rightArm){ rightArm.rotation.x = -0.4; rightArm.rotation.z = -1.1; }
-    if(torso){ torso.rotation.x = -0.18; }
-  } else if(mode === 'dash'){
-    if(leftArm){ leftArm.rotation.x = 0.9; leftArm.rotation.z = 0.45; }
-    if(rightArm){ rightArm.rotation.x = 0.9; rightArm.rotation.z = -0.45; }
-    if(leftLeg){ leftLeg.rotation.x = -0.35; }
-    if(rightLeg){ rightLeg.rotation.x = 0.65; }
-    if(torso){ torso.rotation.x = -0.22; }
-  } else if(mode === 'climb'){
-    const climbAmp = 0.55;
-    if(leftArm){ leftArm.rotation.x = -0.9 + Math.cos(state.phase)*0.45; leftArm.rotation.z = 0.3; }
-    if(rightArm){ rightArm.rotation.x = -0.9 + Math.cos(state.phase + Math.PI)*0.45; rightArm.rotation.z = -0.3; }
-    if(leftLeg){ leftLeg.rotation.x = 0.6 + Math.sin(state.phase)*0.4; }
-    if(rightLeg){ rightLeg.rotation.x = 0.6 + Math.sin(state.phase + Math.PI)*0.4; }
-    if(torso){ torso.rotation.x = 0.28; }
-    if(hips){ hips.position.y += Math.sin(state.phase)*0.06; }
-  } else if(mode === 'air'){
-    if(leftArm){ leftArm.rotation.x = -0.45; leftArm.rotation.z = 0.25; }
-    if(rightArm){ rightArm.rotation.x = -0.45; rightArm.rotation.z = -0.25; }
-    if(leftLeg){ leftLeg.rotation.x = 0.28; }
-    if(rightLeg){ rightLeg.rotation.x = -0.18; }
-    if(torso){ torso.rotation.x = 0.12; }
-  } else {
-    const idleSwing = Math.sin(state.phase*0.5) * 0.05;
-    if(hips){ hips.position.y += idleSwing * 0.15; }
-    if(leftArm){ leftArm.rotation.x += idleSwing * 0.35; leftArm.rotation.z = 0.08; }
-    if(rightArm){ rightArm.rotation.x -= idleSwing * 0.35; rightArm.rotation.z = -0.08; }
-    if(head){ head.rotation.y += Math.sin(state.phase*0.25) * 0.04; }
+  if(!root) return;
+  root.userData = root.userData || {};
+  root.userData.cubeAnim = root.userData.cubeAnim || {phase: Math.random()*Math.PI*2};
+  const state = root.userData.cubeAnim;
+  state.phase += (dt || 0.016) * 3.5;
+  const body = root.getObjectByName('cubeBody');
+  if(body){
+    body.position.y = 0.4 + Math.sin(state.phase) * 0.03;
   }
 }
 
@@ -1636,9 +1538,9 @@ async function ensureHighQualityModels(){
   if(enemyTemplates.high && playerTemplates.high) return;
   if(highQualityLoadPromise) return highQualityLoadPromise;
   highQualityLoadPromise = (async()=>{
-    enemyTemplates.high = createHumanoidTemplate({ detail:'high', height:1.74, type:'enemy', primary:0xd04f4f, secondary:0x401919, skin:0xffe0c8, accent:0xf2c36b });
+    enemyTemplates.high = createHumanoidTemplate({ height:1.74, type:'enemy', primary:0xd04f4f, secondary:0x401919 });
     const primary = new THREE.Color(customCubeColorHex || '#4da6ff').getHex();
-    playerTemplates.high = createHumanoidTemplate({ detail:'high', height:1.76, type:'player', primary, secondary:0x24355b, skin:0xffd7c4, accent:0xffffff });
+    playerTemplates.high = createHumanoidTemplate({ height:1.76, type:'player', primary, secondary:0x24355b });
   })().finally(()=>{ highQualityLoadPromise = null; });
   return highQualityLoadPromise;
 }
@@ -1868,6 +1770,7 @@ function createArmRig(){
   group.add(weapon);
 
   camera.add(group);
+  registerForAlexland(group);
 
   const leftTarget = {pos:new THREE.Vector3(), quat:new THREE.Quaternion()};
   const rightTarget = {pos:new THREE.Vector3(), quat:new THREE.Quaternion()};
@@ -1997,6 +1900,9 @@ function updateArmRigWithPalette(palette){
       }
     });
   }
+  if(armRig.group){
+    refreshAlexlandBaseline(armRig.group);
+  }
 }
 
 function registerLocalAvatarPaletteSync(avatar){
@@ -2043,6 +1949,7 @@ const player = {
   id: Math.random().toString(36).slice(2,9),
   name: 'me'
 };
+player.name = (nameInput?.value || player.name || 'Player');
 
 function applyColorToPlayerMesh(hex){
   if(!alexMesh) return;
@@ -2050,15 +1957,15 @@ function applyColorToPlayerMesh(hex){
   const accent = color.clone().offsetHSL(0, 0, -0.2);
   alexMesh.traverse(node=>{
     if(node.isMesh && node.material && node.material.color){
-      const name = (node.name || '').toLowerCase();
-      if(name.includes('eye') || name.includes('brow')) return;
-      if(name.includes('accent') || name.includes('boot') || name.includes('belt')){
+      const name = (node.name || '');
+      if(name === 'cubeCap'){
         node.material.color.copy(accent);
-      } else {
+      } else if(name === 'cubeBody' || name === 'cubeFace'){
         node.material.color.copy(color);
       }
     }
   });
+  refreshAlexlandBaseline(alexMesh);
   updateArmRigWithPalette();
 }
 
@@ -2073,6 +1980,17 @@ applyColorToPlayerMesh(customCubeColorHex);
 /* Controls */
 let keys = {};
 window.addEventListener('keydown', e=>{
+  if(e.code === 'Escape'){
+    e.preventDefault();
+    if(pauseMenuEl && pauseMenuEl.style.display !== 'none'){
+      closePauseMenu();
+    } else if(mainMenuEl && mainMenuEl.style.display !== 'none'){
+      showPlayIntro();
+    } else {
+      openPauseMenu();
+    }
+    return;
+  }
   keys[e.code]=true;
   updateKeyboardState();
   if(e.code==='KeyY') player.thirdPerson = !player.thirdPerson;
@@ -2120,7 +2038,6 @@ function updateKeyboardState(){
   keyboardState.wheelHeld = !!keys['KeyQ'];
 }
 updateKeyboardState();
-window.addEventListener('keydown', e=>{ if(e.code==='Escape') document.exitPointerLock?.(); });
 let isLocked = false;
 renderer.domElement.addEventListener('click', ()=> renderer.domElement.requestPointerLock?.());
 document.addEventListener('pointerlockchange', ()=>{
@@ -2698,6 +2615,7 @@ function spawnEnemy(forceType){
   const template = getActiveEnemyTemplate();
   const clone = cloneTemplate(template);
   tintEnemyMesh(clone, type);
+  refreshAlexlandBaseline(clone);
   const angle=Math.random()*Math.PI*2;
   const dist=12+Math.random()*12;
   clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist);
@@ -2856,6 +2774,8 @@ function spawnBulletFromShot(shot, ownerId){
       hitIds: new Set()
     };
     scene.add(mesh); bullets.push(mesh);
+    registerForAlexland(mesh);
+    refreshAlexlandBaseline(mesh);
     return mesh;
   }
   const radius = shot.size ?? 0.1;
@@ -2892,6 +2812,8 @@ function spawnBulletFromShot(shot, ownerId){
     gravity: shot.gravity ?? 0
   };
   scene.add(mesh); bullets.push(mesh);
+  registerForAlexland(mesh);
+  refreshAlexlandBaseline(mesh);
   return mesh;
 }
 
@@ -3095,10 +3017,29 @@ function setMenuOpen(open){
   menuOpen = open;
 }
 
+function showPlayIntro(){
+  if(playIntroEl){ playIntroEl.classList.remove('hidden'); }
+  if(playModeSelectEl){ playModeSelectEl.classList.add('hidden'); }
+}
+
+function showPlayModeSelect(){
+  if(playIntroEl){ playIntroEl.classList.add('hidden'); }
+  if(playModeSelectEl){ playModeSelectEl.classList.remove('hidden'); }
+  if(menuPlayerNameInput){
+    if(!menuPlayerNameInput.value){
+      menuPlayerNameInput.value = nameInput.value || player.name || '';
+    }
+    menuPlayerNameInput.focus();
+  }
+}
+
 function showMainMenu(){
   if(mainMenuEl){
     mainMenuEl.style.display = 'flex';
   }
+  if(pauseMenuEl){ pauseMenuEl.style.display = 'none'; }
+  showPlayIntro();
+  gameHasStarted = false;
   setMenuOpen(true);
 }
 
@@ -3107,6 +3048,20 @@ function closeMainMenu(){
     mainMenuEl.style.display = 'none';
   }
   setMenuOpen(false);
+}
+
+function closePauseMenu(){
+  if(pauseMenuEl){ pauseMenuEl.style.display = 'none'; }
+  setMenuOpen(false);
+}
+
+function openPauseMenu(){
+  if(mainMenuEl && mainMenuEl.style.display !== 'none') return;
+  if(pauseMenuEl){
+    pauseMenuEl.style.display = 'flex';
+  }
+  document.exitPointerLock?.();
+  setMenuOpen(true);
 }
 
 let gameHasStarted = false;
@@ -3119,24 +3074,30 @@ function initializeMenuUI(){
   }
   applyCustomCubeColor(customCubeColorHex);
 
-  const storedSound = readCookie(SOUND_COOKIE_KEY);
-  if(storedSound){
-    soundEffectsEnabled = storedSound !== 'off';
-  }
-  if(soundToggleInput){
-    soundToggleInput.checked = soundEffectsEnabled;
-    soundToggleInput.addEventListener('change', ()=>{
-      soundEffectsEnabled = !!soundToggleInput.checked;
-      writeCookie(SOUND_COOKIE_KEY, soundEffectsEnabled ? 'on' : 'off');
-      if(soundEffectsEnabled){ ensureAudioContext(); }
-    });
-  }
   if(cubeColorInput){
     cubeColorInput.value = customCubeColorHex;
     cubeColorInput.addEventListener('input', e=>{
       const hex = e.target.value || '#4da6ff';
       applyCustomCubeColor(hex);
       writeCookie(COLOR_COOKIE_KEY, hex);
+      refreshAlexlandBaseline(alexMesh);
+    });
+  }
+
+  const storedAlexland = readCookie(ALEXLAND_COOKIE_KEY);
+  if(storedAlexland){
+    setAlexlandMode(storedAlexland === 'on');
+    if(alexlandToggleInput){
+      alexlandToggleInput.checked = (storedAlexland === 'on');
+    }
+  } else {
+    setAlexlandMode(false);
+  }
+  if(alexlandToggleInput){
+    alexlandToggleInput.addEventListener('change', ()=>{
+      const enabled = !!alexlandToggleInput.checked;
+      setAlexlandMode(enabled);
+      writeCookie(ALEXLAND_COOKIE_KEY, enabled ? 'on' : 'off');
     });
   }
 
@@ -3152,17 +3113,63 @@ function initializeMenuUI(){
 
   if(startButton){
     startButton.addEventListener('click', ()=>{
-      gameHasStarted = true;
-      ensureAudioContext();
-      score = 0;
-      closeMainMenu();
-      startNextWave(true);
+      showPlayModeSelect();
     });
   }
+
+  function updateNameFromMenu(){
+    const raw = (menuPlayerNameInput?.value || '').trim();
+    const name = raw || 'Player';
+    nameInput.value = name;
+    player.name = name;
+    savePersistedNetworkSettings({name});
+    updatePlayers();
+  }
+
+  if(menuPlayerNameInput){
+    menuPlayerNameInput.value = nameInput.value || player.name || '';
+    menuPlayerNameInput.addEventListener('input', updateNameFromMenu);
+  }
+
+  if(btnPlayBack){
+    btnPlayBack.addEventListener('click', ()=>{
+      showPlayIntro();
+    });
+  }
+
+  function beginGame(mode){
+    if(menuPlayerNameInput){
+      updateNameFromMenu();
+    } else {
+      const fallback = (nameInput.value || player.name || 'Player').trim();
+      player.name = fallback || 'Player';
+      savePersistedNetworkSettings({name: player.name});
+    }
+    score = 0;
+    gameHasStarted = true;
+    closeMainMenu();
+    closePauseMenu();
+    startNextWave(true);
+    if(mode === 'host'){ btnHost?.click(); }
+    if(mode === 'join'){ btnJoin?.click(); }
+  }
+
+  btnPlaySolo?.addEventListener('click', ()=> beginGame('solo'));
+  btnPlayHost?.addEventListener('click', ()=> beginGame('host'));
+  btnPlayJoin?.addEventListener('click', ()=> beginGame('join'));
 
   updateCubePreview(customCubeColorHex);
   showMainMenu();
 }
+
+btnResume?.addEventListener('click', ()=>{
+  closePauseMenu();
+});
+
+btnPauseMenu?.addEventListener('click', ()=>{
+  closePauseMenu();
+  showMainMenu();
+});
 
 function setSignalingStatus(text, mode='info'){
   connectionLabel = text;
