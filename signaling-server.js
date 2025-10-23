@@ -162,7 +162,7 @@ wss.on('connection', ws=>{
           capacity: normalizeCapacity(msg.capacity ?? room.meta?.capacity ?? 10)
         };
         ws.meta = { room: roomCode, role:'host', peerId:'host', name: room.hostInfo.name, playerId: room.hostInfo.playerId };
-        send(ws, { type:'welcome', id:'host' });
+        send(ws, { type:'welcome', id:'host', meta: room.meta });
         return;
       }
 
@@ -180,7 +180,7 @@ wss.on('connection', ws=>{
         playerId: msg.playerId || peerId
       };
       room.clients.set(peerId, { socket: ws, name: ws.meta.name, playerId: ws.meta.playerId });
-      send(ws, { type:'welcome', id: peerId });
+      send(ws, { type:'welcome', id: peerId, meta: room.meta });
       send(room.host, { type:'join-request', peerId, name: ws.meta.name, playerId: ws.meta.playerId });
       return;
     }
