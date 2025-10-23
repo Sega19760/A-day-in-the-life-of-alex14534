@@ -647,6 +647,533 @@ const weaponConfigs = [
 ];
 const weaponConfigById = new Map(weaponConfigs.map(cfg=>[cfg.id, cfg]));
 
+const ROBLOX_AVATAR_PROFILES = {
+  player: {
+    userId: 1771701294,
+    fallback: {
+      skin: 0xffd9c0,
+      head: 0xffd9c0,
+      torso: 0x1f3e78,
+      torsoAccent: 0xffd15f,
+      sleeve: 0x1f3e78,
+      shoulders: 0x223c74,
+      belt: 0x0d1424,
+      boots: 0x2d355c,
+      leftArm: 0xffd9c0,
+      rightArm: 0xffd9c0,
+      leftLeg: 0x1b1d2b,
+      rightLeg: 0x1b1d2b,
+      brow: 0x2a2a2a,
+      eye: 0x111111,
+      accessories: [
+        {type:'hair', color:0x2f1b10, offset:[0,0.33,0], radius:0.26, height:0.14},
+        {type:'cap', color:0x1f3e78, offset:[0,0.37,0], brimRadius:0.34, brimThickness:0.05, height:0.2, billLength:0.22, billWidth:0.26}
+      ]
+    }
+  },
+  enemy: {
+    userId: 4665392450,
+    fallback: {
+      skin: 0xffc8ad,
+      head: 0xffc8ad,
+      torso: 0x4c0f16,
+      torsoAccent: 0x87212c,
+      sleeve: 0x4c0f16,
+      shoulders: 0x87212c,
+      belt: 0x22070a,
+      boots: 0x3a0c12,
+      leftArm: 0xffc8ad,
+      rightArm: 0xffc8ad,
+      leftLeg: 0x1b1b1b,
+      rightLeg: 0x1b1b1b,
+      brow: 0x1f1010,
+      eye: 0x0d0606,
+      accessories: [
+        {type:'hair', color:0x12090a, offset:[0,0.34,0], radius:0.24, height:0.14},
+        {type:'hat', color:0x87212c, offset:[0,0.36,0], brimRadius:0.36, brimThickness:0.04, height:0.18, taper:0.88},
+        {type:'backpack', color:0x4c0f16, height:0.5, width:0.36, depth:0.18}
+      ]
+    }
+  }
+};
+
+const ROBLOX_FALLBACK_COLOR_TABLE = {
+  1: 0xf2f3f3,
+  5: 0xd7c59a,
+  6: 0xe4adc8,
+  9: 0x9dc3e6,
+  11: 0xf8f400,
+  12: 0xd47047,
+  18: 0xcc8e69,
+  21: 0xff1d2d,
+  22: 0x2a5bd7,
+  23: 0xffed6f,
+  24: 0x1f75f2,
+  26: 0xbadd3f,
+  27: 0xf8a05e,
+  28: 0xf7c59a,
+  37: 0xff6699,
+  100: 0x323232,
+  101: 0x6d6e6a,
+  102: 0x0d69ac,
+  103: 0x185ed8,
+  104: 0xffb9d5,
+  107: 0xff9438,
+  119: 0xf3f2f2,
+  135: 0x74869b,
+  141: 0x1a1f2b,
+  153: 0x111111,
+  191: 0xf8d90f,
+  192: 0x3a7d44,
+  194: 0x7f6b54,
+  199: 0x6e99ca,
+  208: 0x6d4c41
+};
+
+let robloxColorTable = null;
+let robloxColorPromise = null;
+const robloxAvatarCache = new Map();
+
+function buildFallbackRobloxColorTable(){
+  const map = new Map();
+  for(const key in ROBLOX_FALLBACK_COLOR_TABLE){
+    if(Object.prototype.hasOwnProperty.call(ROBLOX_FALLBACK_COLOR_TABLE, key)){
+      map.set(Number(key), ROBLOX_FALLBACK_COLOR_TABLE[key]);
+    }
+  }
+  return map;
+}
+
+function parseRobloxHexColor(hex){
+  if(typeof hex !== 'string') return null;
+  const match = hex.trim().replace('#','');
+  if(!/^[0-9a-fA-F]{6}$/.test(match)) return null;
+  return parseInt(match, 16);
+}
+
+async function ensureRobloxColorTable(){
+  if(robloxColorTable) return robloxColorTable;
+  if(robloxColorPromise) return robloxColorPromise;
+  if(typeof fetch !== 'function'){
+    robloxColorTable = buildFallbackRobloxColorTable();
+    return robloxColorTable;
+  }
+  robloxColorPromise = (async()=>{
+    try{
+      const res = await fetch('https://avatar.roblox.com/v1/avatar-colors');
+      if(res && res.ok){
+        const json = await res.json();
+        const entries = Array.isArray(json?.data) ? json.data : Array.isArray(json?.colors) ? json.colors : [];
+        const table = buildFallbackRobloxColorTable();
+        for(const entry of entries){
+          const id = entry?.brickColorId ?? entry?.id ?? entry?.brickColor?.id;
+          const hex = parseRobloxHexColor(entry?.hexColor ?? entry?.hex ?? entry?.color ?? entry?.hexValue);
+          if(typeof id === 'number' && Number.isFinite(id) && typeof hex === 'number'){
+            table.set(id, hex);
+          }
+        }
+        robloxColorTable = table;
+        return robloxColorTable;
+      }
+    }catch(err){
+      console.warn('Failed to fetch Roblox color table', err);
+    }
+    robloxColorTable = buildFallbackRobloxColorTable();
+    return robloxColorTable;
+  })().finally(()=>{ robloxColorPromise = null; });
+  return robloxColorPromise;
+}
+
+function colorFromRobloxId(id, fallback){
+  if(typeof id !== 'number' || !Number.isFinite(id)) return fallback;
+  if(!robloxColorTable){
+    robloxColorTable = buildFallbackRobloxColorTable();
+  }
+  if(robloxColorTable.has(id)) return robloxColorTable.get(id);
+  const seeded = Math.sin(id * 12.9898 + 78.233) * 43758.5453;
+  const value = Math.floor((seeded % 1 + 1) % 1 * 0xffffff);
+  const r = Math.max(40, (value >> 16) & 255);
+  const g = Math.max(40, (value >> 8) & 255);
+  const b = Math.max(40, value & 255);
+  const color = (r << 16) | (g << 8) | b;
+  robloxColorTable.set(id, color);
+  return color;
+}
+
+function cloneAccessories(accessories){
+  if(!Array.isArray(accessories)) return [];
+  return accessories.map(acc=>({
+    ...acc,
+    offset: Array.isArray(acc?.offset) ? acc.offset.slice() : acc?.offset,
+    rotation: Array.isArray(acc?.rotation) ? acc.rotation.slice() : acc?.rotation
+  }));
+}
+
+const ROBLOX_COLOR_KEYWORDS = [
+  {words:['black','noir','void','shadow','ebony','charcoal'], color:0x111111},
+  {words:['white','pearl','ivory','snow'], color:0xf2f3f3},
+  {words:['blue','azure','navy','indigo','cerulean'], color:0x1f4fa8},
+  {words:['red','crimson','scarlet','ruby'], color:0xd7263d},
+  {words:['green','emerald','forest','olive'], color:0x2f8f5b},
+  {words:['yellow','gold','sun','lemon'], color:0xffd23c},
+  {words:['orange','amber','pumpkin'], color:0xf26a1b},
+  {words:['pink','rose','magenta'], color:0xf06292},
+  {words:['purple','violet','amethyst','lavender'], color:0x7f51b5},
+  {words:['brown','chocolate','umber','coffee'], color:0x5a3825},
+  {words:['gray','grey','slate','ash','silver'], color:0x7f8c8d},
+  {words:['teal','cyan','aqua'], color:0x1abc9c},
+  {words:['lime','neon'], color:0xaef359},
+  {words:['rainbow'], color:0xff6ff0}
+];
+
+function guessColorFromName(name, fallback){
+  if(typeof name !== 'string') return fallback;
+  const lower = name.toLowerCase();
+  const hexMatch = lower.match(/#([0-9a-f]{6})/i);
+  if(hexMatch){
+    const parsed = parseInt(hexMatch[1], 16);
+    if(!Number.isNaN(parsed)) return parsed;
+  }
+  for(const entry of ROBLOX_COLOR_KEYWORDS){
+    if(entry.words.some(word=> lower.includes(word))){
+      return entry.color;
+    }
+  }
+  return fallback;
+}
+
+function shiftColor(color, factor){
+  if(typeof color !== 'number' || !Number.isFinite(color)) return color;
+  const clamp = v=> Math.max(0, Math.min(255, v));
+  const r = clamp(Math.round(((color>>16)&255) * factor));
+  const g = clamp(Math.round(((color>>8)&255) * factor));
+  const b = clamp(Math.round((color&255) * factor));
+  return (r<<16) | (g<<8) | b;
+}
+
+function combinePalettes(base, override){
+  const result = {};
+  if(base && typeof base === 'object'){
+    for(const key in base){
+      if(key === 'accessories') continue;
+      if(Object.prototype.hasOwnProperty.call(base, key)){
+        result[key] = base[key];
+      }
+    }
+  }
+  if(override && typeof override === 'object'){
+    for(const key in override){
+      if(key === 'accessories') continue;
+      if(Object.prototype.hasOwnProperty.call(override, key) && override[key] !== undefined){
+        result[key] = override[key];
+      }
+    }
+  }
+  return result;
+}
+
+async function fetchRobloxAvatar(userId){
+  if(robloxAvatarCache.has(userId)) return robloxAvatarCache.get(userId);
+  const promise = (async()=>{
+    await ensureRobloxColorTable();
+    if(typeof fetch !== 'function'){
+      throw new Error('fetch unavailable');
+    }
+    const res = await fetch(`https://avatar.roblox.com/v1/users/${userId}/avatar`);
+    if(!res || !res.ok){
+      throw new Error(`Roblox avatar request failed (${res?.status})`);
+    }
+    return res.json();
+  })();
+  robloxAvatarCache.set(userId, promise);
+  return promise;
+}
+
+function buildAppearanceFromAvatarData(data, fallback){
+  const palette = combinePalettes(fallback, {});
+  let accessories = [];
+  const body = data?.bodyColors;
+  if(body){
+    if(body.headColorId !== undefined){
+      palette.head = colorFromRobloxId(body.headColorId, palette.head);
+      palette.skin = palette.skin ?? palette.head;
+    }
+    if(body.leftArmColorId !== undefined){
+      palette.leftArm = colorFromRobloxId(body.leftArmColorId, palette.leftArm ?? palette.skin);
+    }
+    if(body.rightArmColorId !== undefined){
+      palette.rightArm = colorFromRobloxId(body.rightArmColorId, palette.rightArm ?? palette.skin ?? palette.leftArm);
+    }
+    if(body.torsoColorId !== undefined){
+      palette.torso = colorFromRobloxId(body.torsoColorId, palette.torso);
+    }
+    if(body.leftLegColorId !== undefined){
+      const leg = colorFromRobloxId(body.leftLegColorId, palette.leftLeg ?? palette.legs);
+      if(leg !== undefined) palette.leftLeg = leg;
+    }
+    if(body.rightLegColorId !== undefined){
+      const leg = colorFromRobloxId(body.rightLegColorId, palette.rightLeg ?? palette.leftLeg ?? palette.legs);
+      if(leg !== undefined) palette.rightLeg = leg;
+    }
+  }
+  const assets = Array.isArray(data?.assets) ? data.assets : [];
+  const findAsset = names=> assets.find(asset=> names.includes(asset?.assetType?.name));
+  const shirt = findAsset(['Shirt','ShirtAccessory','Jacket','Sweater','TShirt']);
+  if(shirt){
+    const color = guessColorFromName(shirt.name, palette.torso);
+    if(color !== undefined){
+      palette.torso = color;
+      palette.sleeve = shiftColor(color, 0.95);
+      palette.torsoAccent = shiftColor(color, 1.12);
+    }
+  }
+  const pants = findAsset(['Pants','PantsAccessory','Shorts','Skirt','DressSkirt']);
+  if(pants){
+    const color = guessColorFromName(pants.name, palette.leftLeg ?? palette.rightLeg ?? palette.legs);
+    if(color !== undefined){
+      palette.leftLeg = color;
+      palette.rightLeg = color;
+      palette.boots = shiftColor(color, 0.7);
+    }
+  }
+  const face = findAsset(['Face']);
+  if(face){
+    const color = guessColorFromName(face.name, palette.eye ?? 0x1a1a1a);
+    if(color !== undefined){
+      palette.eye = color;
+    }
+  }
+  const hairAssets = assets.filter(asset=> asset?.assetType?.name === 'HairAccessory');
+  const hatAssets = assets.filter(asset=> asset?.assetType?.name === 'Hat');
+  const backAsset = findAsset(['BackAccessory','FrontAccessory']);
+  if(hairAssets.length){
+    const hairColor = guessColorFromName(hairAssets[0].name, 0x312017);
+    accessories.push({type:'hair', color:hairColor, offset:[0,0.34,0], radius:0.28, height:0.16});
+  }
+  if(hatAssets.length){
+    hatAssets.slice(0,2).forEach((asset, idx)=>{
+      const hatColor = guessColorFromName(asset.name, palette.torsoAccent ?? palette.torso ?? 0x3a3a3a);
+      accessories.push({
+        type: idx===0 ? 'cap' : 'hat',
+        color: hatColor,
+        offset: [0, 0.36 + idx*0.08, 0],
+        brimRadius: 0.34,
+        brimThickness: 0.05,
+        height: 0.22,
+        billLength: idx===0 ? 0.24 : undefined,
+        billWidth: idx===0 ? 0.28 : undefined
+      });
+    });
+  }
+  if(backAsset){
+    const packColor = guessColorFromName(backAsset.name, palette.shoulders ?? palette.secondary ?? 0x2f2f2f);
+    accessories.push({type:'backpack', color:packColor});
+  }
+  if(accessories.length === 0 && Array.isArray(fallback?.accessories)){
+    accessories = cloneAccessories(fallback.accessories);
+  }
+  return { palette, accessories };
+}
+
+function setMeshColor(mesh, color){
+  if(!mesh || color === undefined || color === null) return;
+  const applyColor = material=>{
+    if(material && material.color){
+      material.color.setHex(color);
+    }
+  };
+  if(Array.isArray(mesh.material)){
+    mesh.material.forEach(applyColor);
+  } else {
+    applyColor(mesh.material);
+  }
+}
+
+function applyHumanoidPalette(root, palette={}){
+  if(!root || !root.userData || !root.userData.humanoid) return;
+  const humanoid = root.userData.humanoid;
+  const parts = humanoid.parts || {};
+  const detailNodes = humanoid.detailNodes || {};
+  const applyGroup = (group, color)=>{
+    if(!group || color === undefined || color === null) return;
+    group.traverse(node=>{
+      if(node.isMesh && node.material && node.material.color){
+        node.material.color.setHex(color);
+      }
+    });
+  };
+  const skinColor = palette.skin ?? palette.head ?? 0xffd7c4;
+  applyGroup(parts.head, palette.head ?? skinColor);
+  applyGroup(parts.leftArm, palette.leftArm ?? skinColor);
+  applyGroup(parts.rightArm, palette.rightArm ?? skinColor);
+  applyGroup(parts.torso, palette.torso ?? palette.primary ?? 0x4f7bff);
+  applyGroup(parts.leftLeg, palette.leftLeg ?? palette.legs ?? palette.secondary ?? 0x333333);
+  applyGroup(parts.rightLeg, palette.rightLeg ?? palette.legs ?? palette.secondary ?? 0x333333);
+  if(detailNodes.belt) setMeshColor(detailNodes.belt, palette.belt ?? palette.secondary ?? 0x1f2e6b);
+  if(detailNodes.leftBoot) setMeshColor(detailNodes.leftBoot, palette.boots ?? palette.accent ?? 0xffffff);
+  if(detailNodes.rightBoot) setMeshColor(detailNodes.rightBoot, palette.boots ?? palette.accent ?? 0xffffff);
+  if(detailNodes.leftShoulder) setMeshColor(detailNodes.leftShoulder, palette.shoulders ?? palette.secondary ?? 0x1f2e6b);
+  if(detailNodes.rightShoulder) setMeshColor(detailNodes.rightShoulder, palette.shoulders ?? palette.secondary ?? 0x1f2e6b);
+  if(detailNodes.leftSleeve) setMeshColor(detailNodes.leftSleeve, palette.sleeve ?? palette.torso ?? palette.primary ?? 0x4f7bff);
+  if(detailNodes.rightSleeve) setMeshColor(detailNodes.rightSleeve, palette.sleeve ?? palette.torso ?? palette.primary ?? 0x4f7bff);
+  if(detailNodes.torsoOverlay) setMeshColor(detailNodes.torsoOverlay, palette.torsoAccent ?? palette.torso ?? palette.primary ?? 0x4f7bff);
+  if(detailNodes.leftKnee) setMeshColor(detailNodes.leftKnee, palette.knee ?? palette.boots ?? palette.accent ?? 0xffffff);
+  if(detailNodes.rightKnee) setMeshColor(detailNodes.rightKnee, palette.knee ?? palette.boots ?? palette.accent ?? 0xffffff);
+  if(detailNodes.brow) setMeshColor(detailNodes.brow, palette.brow ?? palette.shoulders ?? 0x1e1e1e);
+  if(detailNodes.leftEye) setMeshColor(detailNodes.leftEye, palette.eye ?? 0x1a1a1a);
+  if(detailNodes.rightEye) setMeshColor(detailNodes.rightEye, palette.eye ?? 0x1a1a1a);
+  root.userData.appliedPalette = {...palette, skin: skinColor};
+  const callbacks = root.userData.onPaletteApplied;
+  if(Array.isArray(callbacks)){
+    callbacks.forEach(cb=>{
+      try{ cb({...root.userData.appliedPalette}, root); }
+      catch(err){ console.warn('Avatar palette callback failed', err); }
+    });
+  }
+}
+
+function clearHumanoidAccessories(root){
+  if(!root || !root.userData) return;
+  const existing = root.userData.accessoryGroups;
+  if(Array.isArray(existing)){
+    existing.forEach(group=>{
+      if(group && group.parent){
+        group.parent.remove(group);
+      }
+    });
+  }
+  root.userData.accessoryGroups = [];
+}
+
+function buildAccessoryGroup(def, humanoid){
+  if(!def || !humanoid) return null;
+  const targetName = def.attach || (def.type === 'backpack' ? 'torso' : 'head');
+  const target = humanoid.parts?.[targetName];
+  if(!target) return null;
+  const group = new THREE.Group();
+  group.name = `acc_${def.type || 'generic'}`;
+  const color = def.color ?? 0x333333;
+  const roughness = def.roughness ?? 0.55;
+  const metalness = def.metalness ?? 0.08;
+  const material = new THREE.MeshStandardMaterial({color, roughness, metalness});
+  if(def.type === 'hair'){
+    const radius = def.radius ?? 0.26;
+    const geom = new THREE.SphereGeometry(radius, 18, 12, 0, Math.PI*2, 0, Math.PI/2);
+    const mesh = new THREE.Mesh(geom, material);
+    mesh.scale.set(def.scaleX ?? 1.08, def.scaleY ?? 0.75, def.scaleZ ?? 1.08);
+    mesh.position.y = def.height ?? 0.14;
+    group.add(mesh);
+  } else if(def.type === 'cap' || def.type === 'hat'){
+    const brimThickness = def.brimThickness ?? 0.04;
+    const brimRadius = def.brimRadius ?? 0.34;
+    const brimGeom = new THREE.CylinderGeometry(brimRadius, brimRadius, brimThickness, 20);
+    const brimMesh = new THREE.Mesh(brimGeom, material.clone());
+    brimMesh.position.y = 0;
+    group.add(brimMesh);
+    const topRadius = def.radius ?? 0.2;
+    const topHeight = def.height ?? 0.22;
+    const topGeom = new THREE.CylinderGeometry(topRadius, topRadius * (def.taper ?? 1), topHeight, 20);
+    const topMesh = new THREE.Mesh(topGeom, material.clone());
+    topMesh.position.y = brimThickness/2 + topHeight/2;
+    group.add(topMesh);
+    if(def.type === 'cap'){
+      const billGeom = new THREE.BoxGeometry(def.billWidth ?? 0.28, def.billThickness ?? 0.04, def.billLength ?? 0.24);
+      const billMesh = new THREE.Mesh(billGeom, material.clone());
+      billMesh.position.set(0, brimThickness/2, (topRadius + (def.billLength ?? 0.24)/2) * 0.85);
+      billMesh.rotation.x = -(def.billTilt ?? Math.PI/9);
+      group.add(billMesh);
+    }
+  } else if(def.type === 'backpack'){
+    const packGeom = new THREE.BoxGeometry(def.width ?? 0.38, def.height ?? 0.48, def.depth ?? 0.18);
+    const packMesh = new THREE.Mesh(packGeom, material);
+    packMesh.position.set(0, def.heightOffset ?? 0.2, -(def.depth ?? 0.18)/2 - 0.1);
+    group.add(packMesh);
+  } else if(def.geometry === 'box'){
+    const geom = new THREE.BoxGeometry(def.sizeX ?? 0.2, def.sizeY ?? 0.2, def.sizeZ ?? 0.2);
+    group.add(new THREE.Mesh(geom, material));
+  }
+  if(group.children.length === 0){
+    const geom = new THREE.BoxGeometry(def.size ?? 0.18, def.size ?? 0.18, def.size ?? 0.18);
+    group.add(new THREE.Mesh(geom, material));
+  }
+  if(def.rotation){
+    const [rx=0, ry=0, rz=0] = def.rotation;
+    group.rotation.set(rx, ry, rz);
+  }
+  if(def.offset){
+    const [ox=0, oy=0, oz=0] = def.offset;
+    group.position.set(ox, oy, oz);
+  } else if(def.type === 'backpack'){
+    group.position.set(0, 0.42, -0.05);
+  } else {
+    group.position.set(0, 0.32, 0);
+  }
+  target.add(group);
+  return group;
+}
+
+function applyHumanoidAccessories(root, accessories){
+  if(!root || !root.userData || !root.userData.humanoid) return;
+  clearHumanoidAccessories(root);
+  const humanoid = root.userData.humanoid;
+  const defs = cloneAccessories(accessories);
+  const created = [];
+  for(const def of defs){
+    const group = buildAccessoryGroup(def, humanoid);
+    if(group){
+      created.push(group);
+    }
+  }
+  root.userData.accessoryGroups = created;
+  root.userData.appliedAccessories = defs;
+}
+
+function applyRobloxAppearance(root, profile={}, options={}){
+  if(!root) return;
+  const fallbackAccessories = cloneAccessories(profile?.fallback?.accessories || []);
+  const applyAppearance = (appearance, source)=>{
+    if(!appearance) return;
+    const palette = combinePalettes(profile?.fallback, appearance.palette || appearance);
+    applyHumanoidPalette(root, palette);
+    const acc = appearance.accessories ? cloneAccessories(appearance.accessories) : fallbackAccessories;
+    applyHumanoidAccessories(root, acc);
+    root.userData.robloxAppearance = { palette, accessories: acc, source };
+    if(typeof options.onApplied === 'function'){
+      try{ options.onApplied(root, root.userData.robloxAppearance); }
+      catch(err){ console.warn('Roblox appearance callback failed', err); }
+    }
+  };
+  if(profile?.fallback){
+    applyAppearance({ palette: profile.fallback, accessories: fallbackAccessories }, 'fallback');
+  }
+  if(profile?.userId && typeof fetch === 'function'){
+    fetchRobloxAvatar(profile.userId).then(data=>{
+      const built = buildAppearanceFromAvatarData(data, profile?.fallback);
+      applyAppearance(built, 'roblox');
+    }).catch(err=>{
+      console.warn('Failed to load Roblox avatar', profile.userId, err);
+    });
+  }
+}
+
+function decorateTemplateWithRoblox(template, profile, options={}){
+  if(!template) return template;
+  const baseSetup = template.userData?.setupClone;
+  template.userData = template.userData || {};
+  template.userData.setupClone = clone=>{
+    if(baseSetup) baseSetup(clone);
+    applyRobloxAppearance(clone, profile, options);
+  };
+  return template;
+}
+
+function createRobloxHumanoidTemplate(profile, options={}){
+  const base = createHumanoidTemplate(options);
+  return decorateTemplateWithRoblox(base, profile, options);
+}
+
+let armRig = null;
+
 const weaponWheelState = {
   open: false,
   pointer: {x: innerWidth/2, y: innerHeight/2},
@@ -676,22 +1203,25 @@ function cloneTemplate(template){
 }
 
 function createHumanoidTemplate(options={}){
-  const { primary=0x6699ff, secondary=0x24355b, skin=0xffd7c4, accent=0xf5f1e6, height=1.6 } = options;
+  const { primary=0x6699ff, secondary=0x24355b, skin=0xffd7c4, accent=0xf5f1e6, height=1.6, detail='standard' } = options;
   const root = new THREE.Group();
   const hips = new THREE.Group(); hips.name = 'hips'; hips.position.y = 0.76; root.add(hips);
   const torso = new THREE.Group(); torso.name = 'torso'; torso.position.y = 0.36; hips.add(torso);
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.48,0.64,0.32), new THREE.MeshStandardMaterial({color:primary, roughness:0.6, metalness:0.15}));
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.48,0.64,0.32), new THREE.MeshStandardMaterial({color:primary, roughness:0.6, metalness:0.15})); chest.name = 'chest';
   chest.position.y = 0.32; chest.name = 'chest'; torso.add(chest);
   const belt = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.18,0.34), new THREE.MeshStandardMaterial({color:secondary, roughness:0.7}));
   belt.position.y = 0.05; torso.add(belt);
+  belt.name = 'belt';
   const head = new THREE.Group(); head.name = 'head'; head.position.y = 0.7; torso.add(head);
   const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32,0.32,0.32), new THREE.MeshStandardMaterial({color:skin, roughness:0.45}));
+  headMesh.name = 'headMesh';
   headMesh.position.y = 0.16; head.add(headMesh);
   const eyeMat = new THREE.MeshStandardMaterial({color:0x1a1a1a, emissive:0x131313, roughness:0.3});
-  const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.01), eyeMat); leftEye.position.set(-0.08,0.04,0.16); head.add(leftEye);
-  const rightEye = leftEye.clone(); rightEye.position.x = 0.08; head.add(rightEye);
+  const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.01), eyeMat); leftEye.position.set(-0.08,0.04,0.16); leftEye.name = 'leftEye'; head.add(leftEye);
+  const rightEye = leftEye.clone(); rightEye.position.x = 0.08; rightEye.name = 'rightEye'; head.add(rightEye);
   const brow = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.04,0.01), new THREE.MeshStandardMaterial({color:secondary, roughness:0.4}));
   brow.position.set(0,0.12,0.15); head.add(brow);
+  brow.name = 'brow';
 
   function makeLimb(name, isArm){
     const group = new THREE.Group();
@@ -702,6 +1232,7 @@ function createHumanoidTemplate(options={}){
     const geom = new THREE.CylinderGeometry(radius, radius, length, 12);
     const mat = isArm ? new THREE.MeshStandardMaterial({color:skin, roughness:0.55}) : new THREE.MeshStandardMaterial({color:secondary, roughness:0.7});
     const limb = new THREE.Mesh(geom, mat);
+    limb.name = `${name}Mesh`;
     limb.position.y = -length/2;
     group.add(limb);
     return group;
@@ -715,11 +1246,35 @@ function createHumanoidTemplate(options={}){
   [leftLeg, rightLeg].forEach(leg=>{
     const boot = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.1,0.36), bootMat);
     boot.position.set(0, -leg.userData.length + 0.08, 0.08);
+    boot.name = leg === leftLeg ? 'leftBoot' : 'rightBoot';
     leg.add(boot);
   });
   const shoulderMat = new THREE.MeshStandardMaterial({color:secondary, roughness:0.6});
-  const leftShoulder = new THREE.Mesh(new THREE.SphereGeometry(0.12,12,12), shoulderMat); leftShoulder.position.set(-0.32,0.64,0); torso.add(leftShoulder);
-  const rightShoulder = leftShoulder.clone(); rightShoulder.position.x = 0.32; torso.add(rightShoulder);
+  const leftShoulder = new THREE.Mesh(new THREE.SphereGeometry(0.12,12,12), shoulderMat); leftShoulder.position.set(-0.32,0.64,0); leftShoulder.name = 'leftShoulder'; torso.add(leftShoulder);
+  const rightShoulder = leftShoulder.clone(); rightShoulder.position.x = 0.32; rightShoulder.name = 'rightShoulder'; torso.add(rightShoulder);
+
+  if(detail === 'high'){
+    const overlay = new THREE.Mesh(new THREE.BoxGeometry(0.52,0.68,0.34), new THREE.MeshStandardMaterial({color:primary, roughness:0.5, metalness:0.12}));
+    overlay.position.y = 0.32;
+    overlay.name = 'torsoOverlay';
+    torso.add(overlay);
+    const sleeveGeom = new THREE.CylinderGeometry(0.1, 0.12, 0.52, 18);
+    const leftSleeve = new THREE.Mesh(sleeveGeom, new THREE.MeshStandardMaterial({color:primary, roughness:0.55}));
+    leftSleeve.position.y = -leftArm.userData.length * 0.35;
+    leftSleeve.name = 'leftSleeve';
+    leftArm.add(leftSleeve);
+    const rightSleeve = leftSleeve.clone();
+    rightSleeve.name = 'rightSleeve';
+    rightArm.add(rightSleeve);
+    const kneeGeom = new THREE.BoxGeometry(0.26,0.22,0.14);
+    const leftKnee = new THREE.Mesh(kneeGeom, new THREE.MeshStandardMaterial({color:accent, roughness:0.4}));
+    leftKnee.position.set(0,-leftLeg.userData.length + 0.28,0.12);
+    leftKnee.name = 'leftKnee';
+    leftLeg.add(leftKnee);
+    const rightKnee = leftKnee.clone();
+    rightKnee.name = 'rightKnee';
+    rightLeg.add(rightKnee);
+  }
 
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
@@ -731,12 +1286,16 @@ function createHumanoidTemplate(options={}){
   const offset = scaled.min;
   root.position.y -= offset.y;
 
-  root.userData.humanoidOptions = {...options, primary, secondary, skin, accent, height};
+  root.userData.humanoidOptions = {...options, primary, secondary, skin, accent, height, detail};
   root.userData.setupClone = clone=>{
     const parts = {};
+    const detailNodes = {};
     clone.traverse(node=>{
       if(node.name && ['hips','torso','head','leftArm','rightArm','leftLeg','rightLeg'].includes(node.name)){
         parts[node.name] = node;
+      }
+      if(node.name && ['belt','leftBoot','rightBoot','leftShoulder','rightShoulder','leftSleeve','rightSleeve','torsoOverlay','leftKnee','rightKnee','brow','leftEye','rightEye'].includes(node.name)){
+        detailNodes[node.name] = node;
       }
     });
     const baseRot = {};
@@ -746,17 +1305,17 @@ function createHumanoidTemplate(options={}){
       baseRot[key] = n.rotation.clone();
       basePos[key] = n.position.clone();
     }
-    clone.userData.humanoid = { parts, baseRot, basePos, state:{phase:Math.random()*Math.PI*2}, options:{...options, primary, secondary, skin, accent} };
+    clone.userData.humanoid = { parts, baseRot, basePos, detailNodes, state:{phase:Math.random()*Math.PI*2}, options:{...options, primary, secondary, skin, accent, detail} };
   };
   return root;
 }
 
 function createLowEnemyTemplate(){
-  return createHumanoidTemplate({ primary:0xcf5240, secondary:0x3a1111, skin:0xffb8a2, accent:0x2d0c0c, height:1.62, type:'enemy' });
+  return createRobloxHumanoidTemplate(ROBLOX_AVATAR_PROFILES.enemy, { detail:'standard', height:1.68, type:'enemy' });
 }
 
 function createLowPlayerTemplate(){
-  return createHumanoidTemplate({ primary:0x4f7bff, secondary:0x1f2e6b, skin:0xffd8c0, accent:0xffffff, height:1.65, type:'player' });
+  return createRobloxHumanoidTemplate(ROBLOX_AVATAR_PROFILES.player, { detail:'standard', height:1.7, type:'player' });
 }
 
 function updateHumanoidRig(root, anim={}, dt=0){
@@ -891,13 +1450,10 @@ const playerTemplates = { low: createLowPlayerTemplate(), high: null };
 async function ensureHighQualityModels(){
   if(enemyTemplates.high && playerTemplates.high) return;
   if(highQualityLoadPromise) return highQualityLoadPromise;
-  highQualityLoadPromise = Promise.all([
-    loadObjWithMtl('models/oofer.obj', 'models/oofer.mtl').then(object=>{ enemyTemplates.high = prepareModelGroup(object, 1); }),
-    loadObjWithMtl('models/alex.obj', 'models/alex.mtl').then(object=>{ playerTemplates.high = prepareModelGroup(object, 1); })
-  ]).catch(err=>{
-    console.error('Failed to load high quality assets', err);
-    throw err;
-  }).finally(()=>{ highQualityLoadPromise = null; });
+  highQualityLoadPromise = (async()=>{
+    enemyTemplates.high = createRobloxHumanoidTemplate(ROBLOX_AVATAR_PROFILES.enemy, { detail:'high', height:1.74, type:'enemy' });
+    playerTemplates.high = createRobloxHumanoidTemplate(ROBLOX_AVATAR_PROFILES.player, { detail:'high', height:1.76, type:'player' });
+  })().finally(()=>{ highQualityLoadPromise = null; });
   return highQualityLoadPromise;
 }
 
@@ -912,7 +1468,9 @@ function getActivePlayerTemplate(){
 function applyQualityTemplates(){
   if(alexMesh){
     while(alexMesh.children.length){ alexMesh.remove(alexMesh.children[0]); }
-    alexMesh.add(cloneTemplate(getActivePlayerTemplate()));
+    const avatar = cloneTemplate(getActivePlayerTemplate());
+    alexMesh.add(avatar);
+    registerLocalAvatarPaletteSync(avatar);
   }
   if(enemyGroup){
     for(let i=0;i<enemies.length;i++){
@@ -1062,7 +1620,7 @@ function equipWeapon(id, options={}){
     weaponWheelState.selected = idx;
     updateWeaponWheelHighlight();
   }
-  if(typeof armRig !== 'undefined' && armRig){
+  if(armRig){
     armRig.setWeapon(id, options.immediate);
   }
   shootState.cooldown = 0;
@@ -1135,6 +1693,7 @@ function createArmRig(){
     fireTimer: 0,
     fireTimerTotal: 0,
     time: 0,
+    skinMaterials: [leftMesh.material, rightMesh.material],
     setWeapon(id, immediate){
       if(!weaponConfigById.has(id)) return;
       this.weaponId = id;
@@ -1217,6 +1776,28 @@ function createArmRig(){
   return rig;
 }
 
+function updateArmRigWithPalette(palette){
+  if(!armRig || !palette) return;
+  const color = palette.skin ?? palette.head ?? 0xffcaa6;
+  if(Array.isArray(armRig.skinMaterials)){
+    armRig.skinMaterials.forEach(mat=>{
+      if(mat && mat.color){
+        mat.color.setHex(color);
+      }
+    });
+  }
+}
+
+function registerLocalAvatarPaletteSync(avatar){
+  if(!avatar) return;
+  avatar.userData = avatar.userData || {};
+  const handler = palette=> updateArmRigWithPalette(palette);
+  avatar.userData.onPaletteApplied = [handler];
+  if(avatar.userData.appliedPalette){
+    handler(avatar.userData.appliedPalette);
+  }
+}
+
 buildWeaponWheel();
 
 /* Player */
@@ -1259,7 +1840,8 @@ const player = {
 const alexMesh = new THREE.Group();
 scene.add(alexMesh);
 alexMesh.add(cloneTemplate(getActivePlayerTemplate()));
-const armRig = createArmRig();
+armRig = createArmRig();
+registerLocalAvatarPaletteSync(alexMesh.children[0]);
 equipWeapon(player.weapon, {immediate:true});
 
 /* Controls */
