@@ -88,7 +88,7 @@
   <div id="network">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <label>Name: <input id="nameInput" type="text" placeholder="Your name" style="width:140px"></label>
-      <label>Server URL: <input id="serverUrl" type="text" placeholder="wss://example.ngrok-free.app" style="width:210px"></label>
+      <label>Server URL: <input id="serverUrl" type="text" placeholder="wss://example.ngrok-free.app" value="wss://unswarming-etha-unscanned.ngrok-free.dev" style="width:210px"></label>
       <label>Room Code: <input id="roomCode" type="text" placeholder="my-room" style="width:110px"></label>
       <button id="btnHost">Quick Host</button>
       <button id="btnJoin">Quick Join</button>
@@ -427,6 +427,56 @@ const touchLookEl = document.getElementById('touchLook');
 const touchButtons = Array.from(document.querySelectorAll('.touch-button'));
 let remotePlayers = {}; // peerId -> state
 let activeLobbyName = 'Alexland';
+
+const DEFAULT_SIGNALING_URL = 'wss://unswarming-etha-unscanned.ngrok-free.dev';
+const NETWORK_STORAGE_KEY = 'alex-network-settings';
+let persistedNetworkSettings = loadPersistedNetworkSettings();
+
+function loadPersistedNetworkSettings(){
+  if(typeof window === 'undefined' || !window.localStorage){
+    return {};
+  }
+  try{
+    const raw = window.localStorage.getItem(NETWORK_STORAGE_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  }catch(err){
+    console.warn('Failed to read stored network settings', err);
+    return {};
+  }
+}
+
+function savePersistedNetworkSettings(update){
+  if(!update || typeof update !== 'object') return;
+  persistedNetworkSettings = { ...persistedNetworkSettings, ...update };
+  if(typeof window === 'undefined' || !window.localStorage) return;
+  try{
+    window.localStorage.setItem(NETWORK_STORAGE_KEY, JSON.stringify(persistedNetworkSettings));
+  }catch(err){
+    console.warn('Failed to persist network settings', err);
+  }
+}
+
+function applyStoredNetworkDefaults(){
+  const settings = persistedNetworkSettings || {};
+  const server = settings.server || DEFAULT_SIGNALING_URL;
+  serverUrlInput.value = server;
+  if(settings.name){
+    nameInput.value = settings.name;
+  }
+  if(settings.room){
+    roomInput.value = settings.room;
+  }
+  if(settings.lobbyName){
+    lobbyNameInput.value = settings.lobbyName;
+  }
+  if(settings.capacity){
+    lobbyMaxInput.value = settings.capacity;
+  }
+}
+
+applyStoredNetworkDefaults();
 
 const aggregatedInput = {
   move: new THREE.Vector2(),
@@ -2064,6 +2114,27 @@ function clampCapacity(value){
   return 10;
 }
 
+function persistCurrentNetworkForm(){
+  const capacityVal = Number.parseInt(lobbyMaxInput.value, 10);
+  const clamped = Number.isFinite(capacityVal) ? clampCapacity(capacityVal) : 10;
+  savePersistedNetworkSettings({
+    server: (serverUrlInput.value || '').trim() || DEFAULT_SIGNALING_URL,
+    name: (nameInput.value || '').trim(),
+    room: (roomInput.value || '').trim(),
+    lobbyName: (lobbyNameInput.value || '').trim(),
+    capacity: clamped
+  });
+}
+
+[nameInput, serverUrlInput, roomInput, lobbyNameInput, lobbyMaxInput].forEach(el=>{
+  if(!el) return;
+  const handler = ()=> persistCurrentNetworkForm();
+  el.addEventListener('change', handler);
+  if(el !== lobbyMaxInput){
+    el.addEventListener('input', handler);
+  }
+});
+
 function slugifyRoomName(name){
   if(!name) return '';
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -2090,6 +2161,28 @@ function resetLobbySelection(){
   btnJoinLobby.disabled = true;
   lobbyListEl.querySelectorAll('.lobby-entry').forEach(el=> el.classList.remove('active'));
 }
+
+let autoConnectTriggered = false;
+function attemptAutoConnectFromStorage(){
+  if(autoConnectTriggered) return;
+  autoConnectTriggered = true;
+  const settings = persistedNetworkSettings || {};
+  if(!settings.autoConnect) return;
+  const role = settings.lastRole;
+  const room = settings.lastRoom;
+  if(!role || !room) return;
+  if(!roomInput.value){
+    roomInput.value = room;
+  }
+  if(role === 'host' && settings.lastLobbyName && !lobbyNameInput.value){
+    lobbyNameInput.value = settings.lastLobbyName;
+  }
+  setTimeout(()=>{
+    beginSignaling(role === 'host' ? 'host' : 'join');
+  }, 200);
+}
+
+window.addEventListener('load', ()=> attemptAutoConnectFromStorage());
 
 function renderLobbyList(list){
   lobbyListEl.innerHTML = '';
@@ -2262,6 +2355,7 @@ function disconnectFromSignaling(message){
   const note = message || 'Disconnected.';
   manualSignalingDisconnect = true;
   manualDisconnectMessage = note;
+  savePersistedNetworkSettings({ autoConnect: false });
   if(signalingSocket && (signalingSocket.readyState === WebSocket.OPEN || signalingSocket.readyState === WebSocket.CONNECTING || signalingSocket.readyState === WebSocket.CLOSING)){
     try{ signalingSocket.close(); }catch(e){}
     return;
@@ -2304,6 +2398,7 @@ function beginSignaling(role, meta = null){
   }
   player.name = nameInput.value || (isHost ? 'Host' : 'Player');
   updatePlayers();
+  persistCurrentNetworkForm();
   const url = (serverUrlInput.value || 'ws://localhost:3000').trim();
   if(!url){
     alert('Enter a signaling server URL');
@@ -2319,6 +2414,17 @@ function beginSignaling(role, meta = null){
   } else {
     setActiveLobbyName(activeRoomCode);
   }
+  savePersistedNetworkSettings({
+    autoConnect: true,
+    server: url,
+    name: player.name,
+    room: activeRoomCode,
+    lobbyName: isHost && pendingHostMeta ? (pendingHostMeta.lobbyName || activeRoomCode) : activeLobbyName,
+    capacity: isHost && pendingHostMeta ? pendingHostMeta.capacity : Number.parseInt(lobbyMaxInput.value, 10) || 10,
+    lastRole: isHost ? 'host' : 'join',
+    lastRoom: activeRoomCode,
+    lastLobbyName: activeLobbyName
+  });
   try{
     signalingSocket = new WebSocket(url);
   }catch(err){
@@ -2418,6 +2524,12 @@ function handleSignalMessage(msg){
     if(msg.meta && msg.meta.name){
       setActiveLobbyName(msg.meta.name);
     }
+    savePersistedNetworkSettings({
+      autoConnect: true,
+      lastRole: isHost ? 'host' : 'join',
+      lastRoom: activeRoomCode,
+      lastLobbyName: activeLobbyName
+    });
     return;
   }
   if(msg.type === 'error'){
