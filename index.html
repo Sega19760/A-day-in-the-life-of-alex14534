@@ -28,6 +28,19 @@
   .weapon-wheel-hint{position:absolute;left:50%;bottom:-34px;transform:translateX(-50%);font-size:12px;color:#ddd;text-align:center;opacity:0.9}
   #gameOver{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:90;padding:16px;background:rgba(0,0,0,0.9);display:none;text-align:center;border-radius:10px}
   #network{position:absolute;left:8px;bottom:8px;z-index:60;background:var(--ui-bg);padding:8px;border-radius:8px;max-width:calc(100% - 16px)}
+  .lobby-browser{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:120;background:rgba(7,7,7,0.92);border-radius:16px;padding:18px;display:none;min-width:520px;min-height:320px;box-shadow:0 18px 50px rgba(0,0,0,0.55)}
+  .lobby-browser.open{display:flex;flex-direction:column;gap:12px}
+  .lobby-browser-header{display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:600}
+  .lobby-browser-body{display:flex;gap:12px;flex:1;min-height:220px}
+  .lobby-list{flex:1;display:flex;flex-direction:column;gap:6px;overflow-y:auto;padding-right:4px}
+  .lobby-entry{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.06);cursor:pointer;border:1px solid transparent;transition:background 0.15s,border 0.15s}
+  .lobby-entry:hover{background:rgba(255,255,255,0.12)}
+  .lobby-entry.active{background:rgba(255,255,255,0.18);border-color:rgba(255,255,255,0.35)}
+  .lobby-detail{flex:1.1;display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;background:rgba(255,255,255,0.04)}
+  .lobby-detail h3{margin:0;font-size:18px}
+  .lobby-player-list{flex:1;overflow-y:auto;background:rgba(0,0,0,0.25);border-radius:10px;padding:8px;font-size:13px}
+  .lobby-player-list.empty{display:flex;align-items:center;justify-content:center;opacity:0.7}
+  .lobby-actions{display:flex;gap:8px;justify-content:flex-end}
   textarea{width:480px;height:120px;background:#111;color:#fff;border:1px solid #333;padding:6px;border-radius:6px;resize:vertical}
   @media(max-width:640px){ textarea{width:calc(100vw - 32px)} .instructions{max-width:140px;font-size:12px} .hud,.players,.instructions,#network{padding:6px;font-size:13px} }
   button{padding:6px 10px;margin:4px;border-radius:8px;border:none;background:var(--btn);color:#fff;cursor:pointer}
@@ -62,16 +75,44 @@
   <div id="network">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <label>Name: <input id="nameInput" type="text" placeholder="Your name" style="width:140px"></label>
-      <label>Server URL: <input id="serverUrl" type="text" placeholder="ws://localhost:3000" style="width:170px"></label>
+      <label>Server URL: <input id="serverUrl" type="text" placeholder="wss://example.ngrok-free.app" style="width:210px"></label>
       <label>Room Code: <input id="roomCode" type="text" placeholder="my-room" style="width:110px"></label>
-      <button id="btnHost">Host</button>
-      <button id="btnJoin">Join</button>
+      <button id="btnHost">Quick Host</button>
+      <button id="btnJoin">Quick Join</button>
       <button id="btnDisconnect" disabled>Disconnect</button>
       <button id="btnHide">Hide UI</button>
     </div>
 
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+      <label>Lobby Name: <input id="lobbyName" type="text" placeholder="City Showdown" style="width:170px"></label>
+      <label>Max Players: <input id="lobbyMax" type="number" min="1" max="16" value="10" style="width:60px"></label>
+      <button id="btnCreateLobby">Create Lobby</button>
+      <button id="btnBrowseLobbies">Browse Lobbies</button>
+    </div>
+
     <div id="connectionStatus" class="small" style="margin-top:6px">Status: disconnected</div>
     <div id="networkLog" class="small" style="margin-top:6px;max-height:140px;overflow:auto;white-space:pre-line"></div>
+  </div>
+</div>
+
+<div id="lobbyBrowser" class="lobby-browser">
+  <div class="lobby-browser-header">
+    <span>Lobby Browser</span>
+    <div>
+      <button id="btnRefreshLobbies" style="margin:0 6px 0 0">Refresh</button>
+      <button id="btnCloseLobbyBrowser">Close</button>
+    </div>
+  </div>
+  <div class="lobby-browser-body">
+    <div id="lobbyList" class="lobby-list"></div>
+    <div class="lobby-detail">
+      <h3 id="lobbyDetailName">Select a lobby</h3>
+      <div id="lobbyDetailMeta" class="small" style="opacity:0.8">Pick a room from the list to see who is inside.</div>
+      <div id="lobbyPlayers" class="lobby-player-list empty">No lobby selected</div>
+      <div class="lobby-actions">
+        <button id="btnJoinLobby" disabled>Join Lobby</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -101,9 +142,21 @@ const playersDiv = document.getElementById('players');
 const nameInput = document.getElementById('nameInput');
 const serverUrlInput = document.getElementById('serverUrl');
 const roomInput = document.getElementById('roomCode');
+const lobbyNameInput = document.getElementById('lobbyName');
+const lobbyMaxInput = document.getElementById('lobbyMax');
 const statusEl = document.getElementById('connectionStatus');
 const networkLogEl = document.getElementById('networkLog');
 const btnDisconnect = document.getElementById('btnDisconnect');
+const btnCreateLobby = document.getElementById('btnCreateLobby');
+const btnBrowseLobbies = document.getElementById('btnBrowseLobbies');
+const btnRefreshLobbies = document.getElementById('btnRefreshLobbies');
+const btnCloseLobbyBrowser = document.getElementById('btnCloseLobbyBrowser');
+const btnJoinLobby = document.getElementById('btnJoinLobby');
+const lobbyBrowserEl = document.getElementById('lobbyBrowser');
+const lobbyListEl = document.getElementById('lobbyList');
+const lobbyDetailNameEl = document.getElementById('lobbyDetailName');
+const lobbyDetailMetaEl = document.getElementById('lobbyDetailMeta');
+const lobbyPlayersEl = document.getElementById('lobbyPlayers');
 const weaponWheelEl = document.getElementById('weaponWheel');
 let remotePlayers = {}; // peerId -> state
 
@@ -993,6 +1046,8 @@ let signalingSocket = null;
 let localPeerId = '';
 let activeRoomCode = '';
 let connectionLabel = 'disconnected';
+let pendingHostMeta = null;
+let lobbyState = { list: [], selected: null };
 
 /* pause when menu open */
 function setMenuOpen(open){
@@ -1018,6 +1073,162 @@ function logNetwork(msg){
   const now = new Date();
   const stamp = now.toLocaleTimeString();
   networkLogEl.textContent = `${stamp} — ${msg}\n${networkLogEl.textContent}`.slice(0, 4000);
+}
+
+function clampCapacity(value){
+  const num = Number.parseInt(value, 10);
+  if(Number.isFinite(num)){
+    return Math.min(16, Math.max(1, num));
+  }
+  return 10;
+}
+
+function slugifyRoomName(name){
+  if(!name) return '';
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+}
+
+function websocketToHttp(url){
+  try{
+    const parsed = new URL(url);
+    if(parsed.protocol === 'ws:') parsed.protocol = 'http:';
+    if(parsed.protocol === 'wss:') parsed.protocol = 'https:';
+    return parsed.toString().replace(/\/$/, '');
+  }catch(err){
+    if(url.startsWith('http')) return url.replace(/\/$/, '');
+    return `http://${url.replace(/\/$/, '')}`;
+  }
+}
+
+function resetLobbySelection(){
+  lobbyState.selected = null;
+  lobbyDetailNameEl.textContent = 'Select a lobby';
+  lobbyDetailMetaEl.textContent = 'Pick a room from the list to see who is inside.';
+  lobbyPlayersEl.textContent = 'No lobby selected';
+  lobbyPlayersEl.classList.add('empty');
+  btnJoinLobby.disabled = true;
+  lobbyListEl.querySelectorAll('.lobby-entry').forEach(el=> el.classList.remove('active'));
+}
+
+function renderLobbyList(list){
+  lobbyListEl.innerHTML = '';
+  lobbyState.list = list;
+  if(!list.length){
+    const empty = document.createElement('div');
+    empty.textContent = 'No public lobbies online';
+    empty.style.opacity = '0.6';
+    empty.style.padding = '12px';
+    lobbyListEl.appendChild(empty);
+    resetLobbySelection();
+    return;
+  }
+  list.forEach(lobby=>{
+    const entry = document.createElement('div');
+    entry.className = 'lobby-entry';
+    entry.dataset.code = lobby.code;
+    const nameSpan = document.createElement('div');
+    nameSpan.textContent = lobby.name || lobby.code;
+    const countSpan = document.createElement('div');
+    countSpan.textContent = `${lobby.players.length}/${lobby.capacity}`;
+    countSpan.style.opacity = '0.8';
+    entry.appendChild(nameSpan);
+    entry.appendChild(countSpan);
+    entry.addEventListener('click', ()=>{
+      selectLobby(lobby.code);
+    });
+    lobbyListEl.appendChild(entry);
+  });
+  resetLobbySelection();
+}
+
+function selectLobby(code){
+  const lobby = lobbyState.list.find(l=>l.code === code);
+  lobbyListEl.querySelectorAll('.lobby-entry').forEach(el=>{
+    el.classList.toggle('active', el.dataset.code === code);
+  });
+  if(!lobby){
+    resetLobbySelection();
+    return;
+  }
+  lobbyState.selected = lobby;
+  lobbyDetailNameEl.textContent = lobby.name || lobby.code;
+  lobbyDetailMetaEl.textContent = `${lobby.players.length}/${lobby.capacity} players`;
+  lobbyPlayersEl.classList.toggle('empty', lobby.players.length === 0);
+  lobbyPlayersEl.innerHTML = '';
+  if(!lobby.players.length){
+    const empty = document.createElement('div');
+    empty.textContent = 'Be the first to join!';
+    empty.style.opacity = '0.75';
+    lobbyPlayersEl.appendChild(empty);
+  } else {
+    lobby.players.forEach(p=>{
+      const row = document.createElement('div');
+      row.textContent = p.name || p.id;
+      lobbyPlayersEl.appendChild(row);
+    });
+  }
+  const full = lobby.players.length >= lobby.capacity;
+  btnJoinLobby.disabled = full;
+  if(full){
+    lobbyDetailMetaEl.textContent += ' (Full)';
+  }
+}
+
+async function refreshLobbyList(){
+  const base = websocketToHttp((serverUrlInput.value || 'ws://localhost:3000').trim());
+  try{
+    const res = await fetch(`${base}/rooms`, { cache: 'no-store' });
+    if(!res.ok){
+      throw new Error(`Server responded with ${res.status}`);
+    }
+    const data = await res.json();
+    renderLobbyList(Array.isArray(data.rooms) ? data.rooms : []);
+    logNetwork(`Loaded ${Array.isArray(data.rooms) ? data.rooms.length : 0} lobby entries`);
+  }catch(err){
+    logNetwork(`Failed to load lobbies: ${err.message || err}`);
+    renderLobbyList([]);
+  }
+}
+
+function openLobbyBrowser(){
+  lobbyBrowserEl.classList.add('open');
+  setMenuOpen(true);
+  refreshLobbyList();
+}
+
+function closeLobbyBrowser(){
+  lobbyBrowserEl.classList.remove('open');
+  resetLobbySelection();
+  if(!signalingSocket){
+    setMenuOpen(false);
+  }
+}
+
+function gatherHostMeta(){
+  const lobbyName = lobbyNameInput.value.trim();
+  const capacity = clampCapacity(lobbyMaxInput.value);
+  return { lobbyName, capacity };
+}
+
+function ensureRoomCode(meta){
+  if(roomInput.value.trim()) return;
+  const fromName = slugifyRoomName(meta.lobbyName);
+  if(fromName){
+    roomInput.value = fromName;
+  } else {
+    roomInput.value = `room-${Math.floor(Math.random()*9000 + 1000)}`;
+  }
+}
+
+function joinSelectedLobby(){
+  if(!lobbyState.selected) return;
+  if(signalingSocket && signalingSocket.readyState === WebSocket.OPEN){
+    alert('Already connected to a lobby. Disconnect first.');
+    return;
+  }
+  roomInput.value = lobbyState.selected.code;
+  closeLobbyBrowser();
+  beginSignaling('join');
 }
 
 function resetNetworkButtons(){
@@ -1066,10 +1277,14 @@ function disconnectFromSignaling(message){
   signalingSocket = null;
   localPeerId = '';
   activeRoomCode = '';
+  pendingHostMeta = null;
   resetNetworkButtons();
   setSignalingStatus('disconnected');
   if(message){ logNetwork(message); }
   closeAllPeers();
+  if(!lobbyBrowserEl.classList.contains('open')){
+    setMenuOpen(false);
+  }
 }
 
 btnDisconnect.onclick = ()=>{
@@ -1089,12 +1304,19 @@ function sendSignal(obj){
   }
 }
 
-function beginSignaling(role){
+function beginSignaling(role, meta = null){
   if(signalingSocket && signalingSocket.readyState === WebSocket.OPEN){
     logNetwork('Already connected to signaling server.');
     return;
   }
   isHost = role === 'host';
+  if(isHost){
+    const hostMeta = meta || gatherHostMeta();
+    pendingHostMeta = { lobbyName: hostMeta.lobbyName || '', capacity: hostMeta.capacity || 10 };
+    ensureRoomCode(pendingHostMeta);
+  } else {
+    pendingHostMeta = null;
+  }
   player.name = nameInput.value || (isHost ? 'Host' : 'Player');
   updatePlayers();
   const url = (serverUrlInput.value || 'ws://localhost:3000').trim();
@@ -1102,7 +1324,11 @@ function beginSignaling(role){
     alert('Enter a signaling server URL');
     return;
   }
-  activeRoomCode = (roomInput.value || 'default').trim();
+  activeRoomCode = (roomInput.value || '').trim();
+  if(!activeRoomCode){
+    alert('Enter or generate a room code.');
+    return;
+  }
   try{
     signalingSocket = new WebSocket(url);
   }catch(err){
@@ -1117,11 +1343,20 @@ function beginSignaling(role){
   btnDisconnect.disabled = true;
   setSignalingStatus('connecting...', 'connecting');
   logNetwork(`Connecting to ${url} as ${isHost ? 'host' : 'joiner'} (room ${activeRoomCode})`);
+  if(lobbyBrowserEl.classList.contains('open')){
+    closeLobbyBrowser();
+  }
 
   signalingSocket.onopen = ()=>{
     setSignalingStatus('connected', 'connected');
     btnDisconnect.disabled = false;
     const hello = { type:'hello', role: isHost ? 'host' : 'join', room: activeRoomCode, name: player.name, playerId: player.id };
+    if(isHost && pendingHostMeta){
+      if(pendingHostMeta.lobbyName){
+        hello.lobbyName = pendingHostMeta.lobbyName;
+      }
+      hello.capacity = pendingHostMeta.capacity || 10;
+    }
     try{ signalingSocket.send(JSON.stringify(hello)); }catch(err){ logNetwork(`Failed to register: ${err.message || err}`); }
   };
   signalingSocket.onclose = ()=>{
@@ -1138,8 +1373,31 @@ function beginSignaling(role){
   };
 }
 
-btnHost.onclick = ()=> beginSignaling('host');
+btnHost.onclick = ()=>{
+  const meta = gatherHostMeta();
+  ensureRoomCode(meta);
+  beginSignaling('host', meta);
+};
 btnJoin.onclick = ()=> beginSignaling('join');
+btnCreateLobby.onclick = ()=>{
+  const meta = gatherHostMeta();
+  if(!meta.lobbyName){
+    alert('Enter a lobby name before creating a lobby.');
+    return;
+  }
+  ensureRoomCode(meta);
+  beginSignaling('host', meta);
+};
+btnBrowseLobbies.onclick = ()=>{
+  if(signalingSocket && signalingSocket.readyState === WebSocket.OPEN){
+    alert('Disconnect before browsing other lobbies.');
+    return;
+  }
+  openLobbyBrowser();
+};
+btnRefreshLobbies.onclick = ()=> refreshLobbyList();
+btnCloseLobbyBrowser.onclick = ()=> closeLobbyBrowser();
+btnJoinLobby.onclick = ()=> joinSelectedLobby();
 
 function handleSignalMessage(msg){
   if(msg.type === 'welcome'){
