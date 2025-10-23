@@ -79,6 +79,11 @@ function buildRoomSummary(room){
 }
 
 const server = createServer((req, res)=>{
+  // Allow the ws upgrade handshake to be handled exclusively by the ws server.
+  const isWebSocketUpgrade = req.headers.upgrade && req.headers.upgrade.toLowerCase() === 'websocket';
+  if(isWebSocketUpgrade){
+    return;
+  }
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
