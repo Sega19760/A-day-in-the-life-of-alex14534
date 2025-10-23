@@ -57,6 +57,7 @@
   .touch-button{width:110px;padding:10px 0;border-radius:28px;background:rgba(0,0,0,0.45);border:2px solid rgba(255,255,255,0.25);color:#fff;text-align:center;font-size:14px;font-weight:600;touch-action:none}
   .touch-button.small{width:86px;font-size:12px;align-self:flex-end}
   .touch-button.active{background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.55)}
+  .parry-flash{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;background:rgba(255,255,255,0.65);opacity:0;transition:opacity 0.18s ease;mix-blend-mode:screen;z-index:140}
   @media(hover:none) and (pointer:coarse){
     .touch-controls{display:block}
   }
@@ -110,6 +111,8 @@
   </div>
 
   <div class="crosshair"></div>
+
+  <div id="parryFlash" class="parry-flash"></div>
 
   <div id="weaponWheel" class="weapon-wheel">
     <div class="weapon-wheel-hint">Move the mouse to highlight a weapon</div>
@@ -176,7 +179,7 @@
       </div>
       <div class="menu-section" data-content="customize">
         <label>Cube Color
-          <input type="color" id="cubeColor" value="#4da6ff">
+          <input type="color" id="cubeColor" value="#01c119">
         </label>
         <div class="menu-color-preview" id="cubePreview"></div>
         <div class="menu-note">Saved automatically (cookies).</div>
@@ -641,6 +644,7 @@ const waveBannerEl = document.getElementById('waveBanner');
 const pauseMenuEl = document.getElementById('pauseMenu');
 const btnResume = document.getElementById('btnResume');
 const btnPauseMenu = document.getElementById('btnPauseMenu');
+const parryFlashEl = document.getElementById('parryFlash');
 let remotePlayers = {}; // peerId -> state
 
 const DEFAULT_SIGNALING_URL = 'wss://unswarming-etha-unscanned.ngrok-free.dev';
@@ -809,9 +813,21 @@ const touchState = {
   justPunched: false
 };
 
-let customCubeColorHex = '#4da6ff';
+let customCubeColorHex = '#01c119';
+let parryAudio = null;
 
-function playSound(){ /* sound effects disabled */ }
+function playSound(name){
+  if(name === 'parry'){
+    if(!parryAudio){
+      parryAudio = new Audio('parry.ogg');
+      parryAudio.preload = 'auto';
+    }
+    try{
+      parryAudio.currentTime = 0;
+      parryAudio.play();
+    }catch(err){}
+  }
+}
 
 function updateCubePreview(hex){
   if(cubePreviewEl){
@@ -1408,7 +1424,14 @@ const weaponWheelState = {
   centerEl: null
 };
 const shootState = {down:false, cooldown:0, mouseDown:false};
-const punchState = {cooldown:0, timer:0, hit:false};
+const punchState = {cooldown:0, timer:0, hit:false, parryWindow:0};
+const parryState = {
+  flash: 0,
+  flashDuration: 1,
+  timeStop: 0,
+  freezeTimer: 0,
+  pendingReturns: []
+};
 
 function cloneTemplate(template){
   const clone = template.clone(true);
@@ -1964,13 +1987,16 @@ const player = {
   climbSpeed: 3.6,
   anim: { mode:'idle', speed:0, variant:0 },
   id: Math.random().toString(36).slice(2,9),
-  name: 'me'
+  name: 'me',
+  parryFrozen: false,
+  stealthTimer: 0,
+  parryActive: false
 };
 player.name = (nameInput?.value || player.name || 'Player');
 
 function applyColorToPlayerMesh(hex){
   if(!alexMesh) return;
-  const color = new THREE.Color(hex || '#4da6ff');
+  const color = new THREE.Color(hex || '#01c119');
   const accent = color.clone().offsetHSL(0, 0, -0.2);
   alexMesh.traverse(node=>{
     if(node.isMesh && node.material && node.material.color){
@@ -2398,6 +2424,20 @@ function updateAggregatedInput(dt){
     closeWeaponWheel();
   }
 
+  if(player.parryFrozen){
+    aggregatedInput.move.set(0,0);
+    aggregatedInput.jumpHeld = false;
+    aggregatedInput.jumpPressed = false;
+    aggregatedInput.slideHeld = false;
+    aggregatedInput.slidePressed = false;
+    aggregatedInput.dashPressed = false;
+    aggregatedInput.wheelHeld = false;
+    aggregatedInput.wheelPressed = false;
+    aggregatedInput.fireHeld = false;
+    aggregatedInput.firePressed = false;
+    shootState.down = false;
+  }
+
   const lookPadSpeed = 2.6;
   if(!weaponWheelState.open){
     player.yaw -= gamepadState.lookX * lookPadSpeed * dt;
@@ -2422,6 +2462,7 @@ function updateAggregatedInput(dt){
 }
 
 function attemptJump(){
+  if(player.parryFrozen) return false;
   if(weaponWheelState.open) return false;
   const canGroundJump = player.grounded || player.coyoteTimer > 0;
   if(canGroundJump){
@@ -2468,6 +2509,7 @@ function attemptJump(){
 }
 
 function triggerDash(direction){
+  if(player.parryFrozen) return false;
   if(weaponWheelState.open) return false;
   if(player.dashTimer > 0 || player.dashCooldown > 0.05) return false;
   const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
@@ -2519,10 +2561,13 @@ function attemptPunchHit(){
 }
 
 function triggerPunch(){
+  if(player.parryFrozen) return false;
   if(weaponWheelState.open || punchState.cooldown > 0) return false;
   punchState.cooldown = 0.55;
   punchState.timer = 0.18;
   punchState.hit = false;
+  punchState.parryWindow = 0.25;
+  player.parryActive = true;
   playSound('punch');
   if(armRig) armRig.triggerFire();
   return true;
@@ -2538,6 +2583,12 @@ function updatePunch(dt){
       if(attemptPunchHit()){
         punchState.hit = true;
       }
+    }
+  }
+  if(punchState.parryWindow > 0){
+    punchState.parryWindow = Math.max(0, punchState.parryWindow - dt);
+    if(punchState.parryWindow <= 0){
+      player.parryActive = false;
     }
   }
 }
@@ -2636,18 +2687,20 @@ function spawnEnemy(forceType){
   const angle=Math.random()*Math.PI*2;
   const dist=12+Math.random()*12;
   clone.position.set(Math.cos(angle)*dist,0.5,Math.sin(angle)*dist);
-  const baseData = {hp:2, speed:1.25, fleeTimer:0, type, damage:1};
+  const baseData = {hp:2, speed:1.25, fleeTimer:0, type, damage:1, hitRadius: type === 'giant' ? 1.3 : type === 'shooter' ? 0.85 : 0.75};
   if(type === 'shooter'){
     baseData.hp = 3;
     baseData.speed = 1.45;
     baseData.shootCooldown = Math.max(0.9, 2.4 - waveState.current * 0.08);
     baseData.shootTimer = 1.2;
+    baseData.hitRadius = 0.9;
   }
   if(type === 'giant'){
     clone.scale.setScalar(1.6);
     baseData.hp = 8;
     baseData.speed = 0.85;
     baseData.damage = 2.5;
+    baseData.hitRadius = 1.4;
   }
   clone.userData = {...(clone.userData||{}), ...baseData};
   enemyGroup.add(clone);
@@ -2826,12 +2879,204 @@ function spawnBulletFromShot(shot, ownerId){
     hitRadius: shot.hitRadius ?? radius*2,
     explode: shot.explode ?? 0,
     pierce: shot.pierce ?? 0,
-    gravity: shot.gravity ?? 0
+    gravity: shot.gravity ?? 0,
+    parry: !!shot.parry
   };
   scene.add(mesh); bullets.push(mesh);
   registerForAlexland(mesh);
   refreshAlexlandBaseline(mesh);
   return mesh;
+}
+
+function scheduleParryReturn(config, ownerId, options = {}){
+  if(!config) return;
+  const originSource = config.origin;
+  let origin;
+  if(Array.isArray(originSource)){
+    origin = originSource.slice();
+  } else if(originSource && typeof originSource.length === 'number'){
+    origin = Array.from(originSource);
+  } else {
+    origin = [player.pos.x, player.pos.y + 0.6, player.pos.z];
+  }
+  let dirSource = options.dir !== undefined ? options.dir : config.dir;
+  let dirArray = null;
+  if(dirSource){
+    if(Array.isArray(dirSource)){
+      dirArray = dirSource.slice();
+    } else if(typeof dirSource.toArray === 'function'){
+      dirArray = dirSource.toArray();
+    } else if(typeof dirSource.x === 'number'){
+      dirArray = [dirSource.x, dirSource.y, dirSource.z];
+    }
+  }
+  const entry = {
+    delay: typeof config.delay === 'number' ? config.delay : 1,
+    origin,
+    enemyId: config.enemyId || null,
+    speed: config.speed,
+    size: config.size,
+    damage: config.damage,
+    ttl: config.ttl,
+    hitRadius: config.hitRadius,
+    color: config.color,
+    dir: dirArray,
+    ownerId: ownerId,
+    parry: !!config.parry
+  };
+  parryState.pendingReturns.push(entry);
+}
+
+function releaseParryShot(entry){
+  const originVec = new THREE.Vector3(...(entry.origin || [player.pos.x, player.pos.y + 0.6, player.pos.z]));
+  let dirVec = null;
+  if(entry.enemyId){
+    for(let i=enemies.length-1;i>=0;i--){
+      const enemy = enemies[i];
+      if(enemy && enemy.uuid === entry.enemyId){
+        dirVec = enemy.position.clone().add(new THREE.Vector3(0,0.6,0)).sub(originVec).normalize();
+        break;
+      }
+    }
+  }
+  if(!dirVec && entry.dir){
+    dirVec = new THREE.Vector3(entry.dir[0] || 0, entry.dir[1] || 0, entry.dir[2] || 0).normalize();
+  }
+  if(!dirVec){
+    dirVec = camera.getWorldDirection(new THREE.Vector3()).normalize();
+  }
+  const shot = {
+    type: 'pulse',
+    pos: originVec.toArray(),
+    dir: dirVec.toArray(),
+    speed: entry.speed || 11,
+    size: entry.size || 0.12,
+    color: entry.color || 0xffd84a,
+    damage: entry.damage || 0.7,
+    ttl: entry.ttl || 2.4,
+    hitRadius: entry.hitRadius || 0.42,
+    parry: entry.parry || false
+  };
+  spawnBulletFromShot(shot, entry.ownerId || player.id);
+}
+
+function beginParrySequence(config, options = {}){
+  punchState.parryWindow = 0;
+  player.parryActive = false;
+  const freezeDuration = options.freezeDuration || 1;
+  const flashDuration = config.flashDuration || freezeDuration;
+  parryState.flashDuration = flashDuration;
+  parryState.flash = flashDuration;
+  if(parryFlashEl){
+    parryFlashEl.style.opacity = '0.55';
+  }
+  playSound('parry');
+  player.parryFrozen = true;
+  parryState.freezeTimer = Math.max(parryState.freezeTimer, freezeDuration);
+  if(!options.multiplayer){
+    parryState.timeStop = Math.max(parryState.timeStop, freezeDuration);
+  } else {
+    player.stealthTimer = Math.max(player.stealthTimer, options.stealthDuration || freezeDuration);
+  }
+  const ownerId = options.ownerId || player.id;
+  scheduleParryReturn(config, ownerId, {dir: config.dir});
+  if(options.broadcast && typeof sendData === 'function'){
+    const payload = {
+      delay: typeof config.delay === 'number' ? config.delay : freezeDuration,
+      origin: Array.isArray(config.origin) ? config.origin.slice() : (config.origin && typeof config.origin.length === 'number' ? Array.from(config.origin) : [player.pos.x, player.pos.y + 0.6, player.pos.z]),
+      enemyId: config.enemyId || null,
+      speed: config.speed,
+      size: config.size,
+      damage: config.damage,
+      ttl: config.ttl,
+      hitRadius: config.hitRadius,
+      color: config.color,
+      parry: !!config.parry,
+      dir: Array.isArray(config.dir) ? config.dir.slice() : (config.dir && typeof config.dir.toArray === 'function' ? config.dir.toArray() : (config.dir && typeof config.dir.x === 'number' ? [config.dir.x, config.dir.y, config.dir.z] : null))
+    };
+    sendData({t:'parry', config: payload, owner: ownerId});
+  }
+}
+
+function parryIncomingShot(bullet, data, index){
+  const origin = player.pos.clone().add(new THREE.Vector3(0,0.6,0));
+  let incomingDir = null;
+  if(data.dir){
+    if(typeof data.dir.clone === 'function'){
+      incomingDir = data.dir.clone().normalize();
+    } else if(Array.isArray(data.dir)){
+      incomingDir = new THREE.Vector3(data.dir[0] || 0, data.dir[1] || 0, data.dir[2] || 0).normalize();
+    } else if(typeof data.dir.x === 'number'){
+      incomingDir = new THREE.Vector3(data.dir.x, data.dir.y, data.dir.z).normalize();
+    }
+  }
+  if(!incomingDir){
+    incomingDir = bullet.position.clone().sub(origin).normalize();
+  }
+  const reflectDir = incomingDir.clone().multiplyScalar(-1);
+  const config = {
+    delay: 1,
+    origin: origin.toArray(),
+    enemyId: data.owner || null,
+    speed: data.speed || 11,
+    size: data.size || 0.12,
+    damage: data.damage || 0.7,
+    ttl: data.ttl || 2.4,
+    hitRadius: data.hitRadius || 0.42,
+    color: data.color || 0xffd84a,
+    dir: reflectDir.toArray(),
+    parry: true
+  };
+  cleanupBullet(index);
+  beginParrySequence(config, {
+    multiplayer: isMultiplayerActive(),
+    ownerId: player.id,
+    broadcast: true,
+    freezeDuration: 1,
+    stealthDuration: 1
+  });
+}
+
+function updateParry(rawDt){
+  if(parryState.flash > 0){
+    parryState.flash = Math.max(0, parryState.flash - rawDt);
+    if(parryFlashEl){
+      const ratio = parryState.flashDuration > 0 ? parryState.flash / parryState.flashDuration : 0;
+      parryFlashEl.style.opacity = (0.55 * Math.min(1, ratio)).toFixed(3);
+    }
+  } else if(parryFlashEl && parryFlashEl.style.opacity !== '0'){
+    parryFlashEl.style.opacity = '0';
+  }
+
+  if(parryState.timeStop > 0){
+    parryState.timeStop = Math.max(0, parryState.timeStop - rawDt);
+  }
+
+  if(parryState.freezeTimer > 0){
+    parryState.freezeTimer = Math.max(0, parryState.freezeTimer - rawDt);
+    if(parryState.freezeTimer <= 0){
+      player.parryFrozen = false;
+    }
+  }
+
+  if(player.stealthTimer > 0){
+    player.stealthTimer = Math.max(0, player.stealthTimer - rawDt);
+  }
+
+  for(let i=parryState.pendingReturns.length-1;i>=0;i--){
+    const entry = parryState.pendingReturns[i];
+    entry.delay -= rawDt;
+    if(entry.delay <= 0){
+      releaseParryShot(entry);
+      parryState.pendingReturns.splice(i,1);
+    }
+  }
+}
+
+function isMultiplayerActive(){
+  const hasRemotes = remotePlayers && Object.keys(remotePlayers).length > 0;
+  const hasPeers = (typeof peerConnections !== 'undefined' && peerConnections) ? Object.keys(peerConnections).length > 0 : false;
+  return hasRemotes || hasPeers;
 }
 
 function cleanupBullet(index){
@@ -2902,10 +3147,17 @@ function applyBeamDamage(beam){
   }
 }
 
-function enemyShoot(enemy){
-  if(!enemy || !player || !player.alive) return;
+function enemyShoot(enemy, targetInfo){
+  if(!enemy) return;
   const origin = enemy.position.clone().add(new THREE.Vector3(0,0.8,0));
-  const target = player.pos.clone().add(new THREE.Vector3(0,0.6,0));
+  let aim = null;
+  if(targetInfo && targetInfo.pos){
+    aim = targetInfo.pos.clone ? targetInfo.pos.clone() : new THREE.Vector3(targetInfo.pos.x, targetInfo.pos.y, targetInfo.pos.z);
+  } else if(player && player.alive){
+    aim = player.pos.clone();
+  }
+  if(!aim) return;
+  const target = aim.add(new THREE.Vector3(0,0.6,0));
   const dir = target.sub(origin).normalize();
   const shot = {
     type:'pulse',
@@ -3106,7 +3358,7 @@ function initializeMenuUI(){
   if(cubeColorInput){
     cubeColorInput.value = customCubeColorHex;
     cubeColorInput.addEventListener('input', e=>{
-      const hex = e.target.value || '#4da6ff';
+      const hex = e.target.value || '#01c119';
       applyCustomCubeColor(hex);
       writeCookie(COLOR_COOKIE_KEY, hex);
       refreshAlexlandBaseline(alexMesh);
@@ -3906,6 +4158,12 @@ function handleRemoteMessage(peerId, msg){
     };
     updatePlayers();
   }
+  if(msg.t === 'parry'){
+    const cfg = msg.config || {};
+    const ownerId = msg.owner || sourceId;
+    scheduleParryReturn(cfg, ownerId, {dir: cfg.dir});
+    return;
+  }
   if(msg.t === 'shoot'){
     if(Array.isArray(msg.shots)){
       msg.shots.forEach(shot=> spawnBulletFromShot(shot, sourceId));
@@ -4182,8 +4440,9 @@ function updateBullets(dt){
     for(let j=enemies.length-1;j>=0;j--){
       const enemy = enemies[j];
       if(!enemy) continue;
+      const enemyRadius = (enemy.userData && typeof enemy.userData.hitRadius === 'number') ? enemy.userData.hitRadius : 0.6;
       const dist = b.position.distanceTo(enemy.position);
-      if(dist <= (data.hitRadius ?? 0.45)){
+      if(dist <= (data.hitRadius ?? 0.45) + enemyRadius){
         if(data.type === 'rocket' && data.explode){
           applyExplosion(b.position, data.explode, data.damage ?? 2);
         } else {
@@ -4205,6 +4464,13 @@ function updateBullets(dt){
       const distToPlayer = b.position.distanceTo(playerHeight);
       const threshold = (data.hitRadius ?? 0.45) + player.radius * 0.4;
       if(distToPlayer <= threshold){
+        if(player.parryActive && punchState.parryWindow > 0 && data.owner){
+          parryIncomingShot(b, data, i);
+          continue;
+        }
+        if(data.parry){
+          continue;
+        }
         player.hp = Math.max(0, player.hp - (data.damage ?? 0.5));
         updateHUD();
         playSound('hit', {pitch:0.5});
@@ -4235,12 +4501,39 @@ function updateBullets(dt){
 const enemyScratch = new THREE.Vector3();
 const enemyMoveDir = new THREE.Vector3();
 const punchScratch = new THREE.Vector3();
+
+function chooseEnemyTarget(enemy){
+  if(player.alive && player.stealthTimer <= 0){
+    return {pos: player.pos, id: player.id, local: true};
+  }
+  let closest = null;
+  let closestDistSq = Infinity;
+  for(const id in remotePlayers){
+    const rp = remotePlayers[id];
+    if(!rp || !rp.pos) continue;
+    if(typeof rp.hp === 'number' && rp.hp <= 0) continue;
+    const distSq = enemy.position.distanceToSquared(rp.pos);
+    if(distSq < closestDistSq){
+      closestDistSq = distSq;
+      closest = {pos: rp.pos, id, local: false};
+    }
+  }
+  if(closest){
+    return closest;
+  }
+  if(player.alive){
+    return {pos: player.pos, id: player.id, local: true};
+  }
+  return null;
+}
 function updateEnemies(dt){
   for(let i=enemies.length-1;i>=0;i--){
     const e = enemies[i];
     if(!e) continue;
     const data = e.userData || (e.userData = {});
-    enemyScratch.copy(player.pos).sub(e.position);
+    const targetInfo = chooseEnemyTarget(e);
+    const targetPos = (targetInfo && targetInfo.pos) ? targetInfo.pos : player.pos;
+    enemyScratch.copy(targetPos).sub(e.position);
     enemyScratch.y = 0;
     const dist = enemyScratch.length();
     if(dist === 0) continue;
@@ -4271,7 +4564,7 @@ function updateEnemies(dt){
       }
       data.shootTimer = (data.shootTimer || 0) - dt;
       if(data.shootTimer <= 0){
-        enemyShoot(e);
+        enemyShoot(e, targetInfo);
         data.shootTimer = data.shootCooldown || 1.8;
       }
     } else {
@@ -4281,22 +4574,26 @@ function updateEnemies(dt){
       e.position.addScaledVector(chaseDir, chaseSpeed * dt);
     }
 
-    const contactRadius = type === 'giant' ? 1.6 : 1.0;
-    if(dist < contactRadius && player.alive){
-      const damage = data.damage || (type === 'shooter' ? 0.6 : 1);
-      player.hp = Math.max(0, player.hp - damage * dt * 2.5);
-      updateHUD();
-      if(player.hp <= 0){
-        player.hp = 0;
-        player.alive = false;
+    const contactRadius = (data.hitRadius || (type === 'giant' ? 1.4 : 0.9)) + 0.3;
+    if(player.alive){
+      const distToPlayer = e.position.distanceTo(player.pos);
+      if(distToPlayer < contactRadius){
+        const damage = data.damage || (type === 'shooter' ? 0.6 : 1);
+        player.hp = Math.max(0, player.hp - damage * dt * 2.5);
         updateHUD();
-        waveState.active = false;
-        waveState.pendingSpawns = 0;
-        gameOverDiv.style.display = 'block';
+        if(player.hp <= 0){
+          player.hp = 0;
+          player.alive = false;
+          updateHUD();
+          waveState.active = false;
+          waveState.pendingSpawns = 0;
+          gameOverDiv.style.display = 'block';
+        }
       }
     }
 
-    e.lookAt(player.pos.x, e.position.y, player.pos.z);
+    const lookPos = (targetInfo && targetInfo.pos) ? targetInfo.pos : player.pos;
+    e.lookAt(lookPos.x, e.position.y, lookPos.z);
     const mode = animSpeed > 0.4 ? 'run' : 'idle';
     updateHumanoidRig(e, {mode, speed:animSpeed}, dt);
   }
@@ -4324,14 +4621,19 @@ function gameTick(now){
   const rawDt = Math.min(0.05, (now - (gameTick.last||now))/1000);
   gameTick.last = now;
   updateAggregatedInput(rawDt);
+  updateParry(rawDt);
   const slowMoActive = weaponWheelState.open && !weaponWheelIsMultiplayer();
   const timeScale = slowMoActive ? 0.25 : 1;
   const dt = rawDt * timeScale;
+  const freezeWorld = parryState.timeStop > 0;
+  const playerFrozen = player.parryFrozen || freezeWorld;
+  const worldDt = freezeWorld ? 0 : dt;
+  const playerDt = playerFrozen ? 0 : dt;
   shootState.cooldown = Math.max(0, shootState.cooldown - rawDt);
 
   if(!menuOpen){
     if(gameHasStarted && waveState.active && player.alive){
-      waveState.spawnTimer -= dt;
+      waveState.spawnTimer -= worldDt;
       while(waveState.spawnTimer <= 0 && waveState.pendingSpawns > 0){
         spawnEnemy();
         waveState.spawnTimer += waveState.spawnInterval;
@@ -4339,11 +4641,11 @@ function gameTick(now){
       }
     }
     if(player.alive){
-      updatePlayer(dt);
+      updatePlayer(playerDt);
       updatePunch(dt);
-      updateBullets(dt);
-      updateEnemies(dt);
-      if(shootState.down){
+      updateBullets(worldDt);
+      updateEnemies(worldDt);
+      if(!playerFrozen && shootState.down){
         shoot();
       }
     }
