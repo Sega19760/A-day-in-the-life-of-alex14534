@@ -41,6 +41,30 @@
   .lobby-player-list{flex:1;overflow-y:auto;background:rgba(0,0,0,0.25);border-radius:10px;padding:8px;font-size:13px}
   .lobby-player-list.empty{display:flex;align-items:center;justify-content:center;opacity:0.7}
   .lobby-actions{display:flex;gap:8px;justify-content:flex-end}
+  .lobby-stage{position:absolute;left:0;top:0;width:100%;height:100%;display:none;align-items:center;justify-content:center;z-index:190;background:rgba(4,8,14,0.78);backdrop-filter:blur(6px)}
+  .lobby-stage.open{display:flex}
+  .lobby-stage-panel{background:rgba(12,18,32,0.95);border-radius:22px;padding:24px 28px;width:90vw;max-width:920px;color:#e6f3ff;display:flex;flex-direction:column;gap:18px;box-shadow:0 26px 70px rgba(0,0,0,0.55)}
+  .lobby-stage-header{display:flex;justify-content:space-between;align-items:center}
+  .lobby-stage-header h2{margin:0;font-size:24px;letter-spacing:0.08em;text-transform:uppercase;color:#7cc4ff}
+  .lobby-stage-status{font-size:13px;opacity:0.75}
+  .lobby-stage-body{display:flex;gap:18px;flex-wrap:wrap}
+  .lobby-stage-roster{flex:1.4;min-width:260px;background:rgba(0,0,0,0.32);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .lobby-stage-roster h3{margin:0;font-size:18px;letter-spacing:0.06em;text-transform:uppercase;color:#a6d4ff}
+  .lobby-roster-list{flex:1;max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+  .lobby-roster-entry{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;font-size:14px}
+  .lobby-roster-entry .name{display:flex;align-items:center;gap:8px}
+  .lobby-roster-entry .crown{color:#ffd15f;font-size:16px}
+  .lobby-roster-entry .ping{font-size:12px;opacity:0.8}
+  .lobby-stage-options{flex:1;min-width:240px;display:flex;flex-direction:column;gap:16px}
+  .lobby-stage-card{background:rgba(0,0,0,0.28);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+  .lobby-stage-card h4{margin:0;font-size:16px;letter-spacing:0.05em;text-transform:uppercase;color:#8fbfff}
+  .lobby-option-grid{display:flex;flex-direction:column;gap:8px}
+  .lobby-option-grid label{display:flex;align-items:center;gap:10px;font-size:14px}
+  .lobby-option-grid select,.lobby-option-grid button{padding:8px 10px;border-radius:10px;border:1px solid rgba(124,196,255,0.25);background:rgba(8,16,28,0.85);color:#e6f3ff}
+  .lobby-stage-actions{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+  .lobby-stage-actions button{padding:10px 18px;border-radius:999px;border:none;background:#3da6ff;color:#fff;font-weight:600;cursor:pointer;box-shadow:0 10px 24px rgba(0,0,0,0.45)}
+  .lobby-stage-actions button:disabled{opacity:0.55;cursor:not-allowed;box-shadow:none}
+  .lobby-ready-toggle{background:rgba(0,0,0,0.35)!important;border:1px solid rgba(124,196,255,0.35)!important}
   textarea{width:480px;height:120px;background:#111;color:#fff;border:1px solid #333;padding:6px;border-radius:6px;resize:vertical}
   @media(max-width:640px){ textarea{width:calc(100vw - 32px)} .instructions{max-width:140px;font-size:12px} .hud,.players,.instructions,#network{padding:6px;font-size:13px} }
   button{padding:6px 10px;margin:4px;border-radius:8px;border:none;background:var(--btn);color:#fff;cursor:pointer}
@@ -196,6 +220,12 @@
   <div class="menu-panel" style="gap:16px;min-width:260px">
     <h1>Paused</h1>
     <div class="menu-subsection" style="width:100%">
+      <label class="menu-field" style="width:100%">Player Name
+        <input type="text" id="pauseNameInput" placeholder="Player">
+      </label>
+      <label class="menu-field" style="width:100%">Cube Color
+        <input type="color" id="pauseColorInput" value="#01c119">
+      </label>
       <button id="btnResume">Resume</button>
       <button id="btnPauseMenu" class="menu-link">Main Menu</button>
     </div>
@@ -219,6 +249,50 @@
       <div class="lobby-actions">
         <button id="btnJoinLobby" disabled>Join Lobby</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="lobbyStage" class="lobby-stage">
+  <div class="lobby-stage-panel">
+    <div class="lobby-stage-header">
+      <h2 id="lobbyStageTitle">Lobby</h2>
+      <div id="lobbyStageStatus" class="lobby-stage-status">Waiting for players…</div>
+    </div>
+    <div class="lobby-stage-body">
+      <div class="lobby-stage-roster">
+        <h3>Players</h3>
+        <div id="lobbyRosterList" class="lobby-roster-list"></div>
+      </div>
+      <div class="lobby-stage-options">
+        <div class="lobby-stage-card">
+          <h4>Gamemode</h4>
+          <div class="lobby-option-grid">
+            <label><input type="radio" name="lobbyMode" value="classic"> Classic (Waves)</label>
+            <label><input type="radio" name="lobbyMode" value="deathmatch"> Deathmatch</label>
+            <label><input type="radio" name="lobbyMode" value="pee"> Pee Deathmatch</label>
+            <label><input type="radio" name="lobbyMode" value="random"> Random</label>
+          </div>
+        </div>
+        <div class="lobby-stage-card">
+          <h4>Map</h4>
+          <div class="lobby-option-grid">
+            <label>Choose Map
+              <select id="lobbyMapSelect">
+                <option value="alexland">Alexland</option>
+                <option value="duel">1v1 Showdown</option>
+                <option value="skyline">Skyline Rush</option>
+              </select>
+            </label>
+            <label><input type="checkbox" id="lobbyFriendlyFire"> Enable Friendly Fire</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lobby-stage-actions">
+      <button id="lobbyLeaveButton" class="lobby-ready-toggle">Leave Lobby</button>
+      <button id="lobbyReadyButton" class="lobby-ready-toggle">Ready Up</button>
+      <button id="lobbyStartButton" disabled>Start Game</button>
     </div>
   </div>
 </div>
@@ -269,12 +343,16 @@ function loadAlexlandTexture(){
   alexlandTexture = loader.load('backflip.gif', tex=>{
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(4,4);
+    tex.needsUpdate = true;
   });
   if(alexlandTexture){
     alexlandTexture.wrapS = alexlandTexture.wrapT = THREE.RepeatWrapping;
     alexlandTexture.repeat.set(4,4);
     alexlandTexture.minFilter = THREE.LinearFilter;
     alexlandTexture.magFilter = THREE.LinearFilter;
+    if('colorSpace' in alexlandTexture){
+      alexlandTexture.colorSpace = THREE.SRGBColorSpace;
+    }
   }
   return alexlandTexture;
 }
@@ -330,9 +408,20 @@ function applyAlexlandMaterial(mat){
   const tex = loadAlexlandTexture();
   if(tex){
     mat.map = tex;
+    mat.map.needsUpdate = true;
   }
   if(mat.color){ mat.color.setHex(0xffffff); }
-  if(mat.emissive){ mat.emissive.setHex(0xffffff); }
+  if(mat.emissive){
+    const baseline = alexlandMaterials.get(mat);
+    if(baseline && baseline.emissive){
+      mat.emissive.copy(baseline.emissive);
+    } else {
+      mat.emissive.setHex(0x202020);
+    }
+  }
+  if('emissiveIntensity' in mat && typeof mat.emissiveIntensity === 'number'){
+    mat.emissiveIntensity = Math.min(1, Math.max(0.1, mat.emissiveIntensity));
+  }
   mat.emissiveMap = null;
   mat.needsUpdate = true;
 }
@@ -362,198 +451,439 @@ function setAlexlandMode(enabled){
 }
 
 const staticColliders = [];
-function addBoxCollider(minX, minY, minZ, maxX, maxY, maxZ){
-  staticColliders.push(new THREE.Box3(new THREE.Vector3(minX, minY, minZ), new THREE.Vector3(maxX, maxY, maxZ)));
-}
 
-const groundMaterial = new THREE.MeshStandardMaterial({color:0x3d9a4a, roughness:0.85, metalness:0.08});
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), groundMaterial);
-ground.rotation.x = -Math.PI/2;
-ground.receiveShadow = true;
-environment.add(ground);
-
-const path = new THREE.Mesh(new THREE.PlaneGeometry(8,26), new THREE.MeshStandardMaterial({color:0x9a7b55, roughness:0.92, metalness:0.05}));
-path.rotation.x = -Math.PI/2;
-path.position.set(0,0.02,-9);
-environment.add(path);
-
-const houseGroup = new THREE.Group();
-const houseBase = new THREE.Mesh(new THREE.BoxGeometry(5.4,3.2,5.4), new THREE.MeshStandardMaterial({color:0xa0785a, roughness:0.72}));
-houseBase.position.y = 1.6;
-houseGroup.add(houseBase);
-const roof = new THREE.Mesh(new THREE.ConeGeometry(4.3,2.8,4), new THREE.MeshStandardMaterial({color:0x7a2a22, roughness:0.45}));
-roof.position.y = 3.8;
-roof.rotation.y = Math.PI/4;
-houseGroup.add(roof);
-const door = new THREE.Mesh(new THREE.BoxGeometry(1.2,2.2,0.2), new THREE.MeshStandardMaterial({color:0x3b281a, roughness:0.6}));
-door.position.set(0,1.1,2.7);
-houseGroup.add(door);
-const windowMat = new THREE.MeshStandardMaterial({color:0x8fd5ff, emissive:0x1a2a33, emissiveIntensity:0.25, roughness:0.2});
-const windowLeft = new THREE.Mesh(new THREE.PlaneGeometry(1.2,1.2), windowMat);
-windowLeft.position.set(-1.6,1.6,2.71);
-windowLeft.rotation.y = Math.PI;
-houseGroup.add(windowLeft);
-const windowRight = windowLeft.clone();
-windowRight.position.x = 1.6;
-houseGroup.add(windowRight);
-houseGroup.position.set(9,0,-6);
-environment.add(houseGroup);
-addBoxCollider(9-2.8, 0, -6-2.8, 9+2.8, 2.2, -6+2.8);
-
-const mountain = new THREE.Mesh(new THREE.ConeGeometry(7.5,10,6), new THREE.MeshStandardMaterial({color:0x61615f, roughness:0.96}));
-mountain.position.set(-12,5,14);
-environment.add(mountain);
-addBoxCollider(-12-5, 0, 14-5, -12+5, 10, 14+5);
-
-const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4,0), new THREE.MeshStandardMaterial({color:0x5a534c, roughness:0.88}));
-rock.position.set(-4,1.2,-3);
-environment.add(rock);
-addBoxCollider(-6.2,0,-5.2,-1.8,2.4,-0.8);
-
-const shrubGeometry = new THREE.ConeGeometry(0.6,1.2,6);
-const shrubMaterial = new THREE.MeshStandardMaterial({color:0x2f7c34, roughness:0.9});
-[[ -2, -11 ], [ 5, -4 ], [ -8, 6 ], [ 3, 10 ], [ 11, -2 ]].forEach(([x,z])=>{
-  const shrub = new THREE.Mesh(shrubGeometry, shrubMaterial);
-  shrub.position.set(x,0.6,z);
-  environment.add(shrub);
-});
-
-function createTree(x, z, height=3.6){
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.26,height*0.6,10), new THREE.MeshStandardMaterial({color:0x6b4b2a, roughness:0.8}));
-  trunk.position.set(x, height*0.3, z);
-  const canopy = new THREE.Mesh(new THREE.ConeGeometry(height*0.35, height*0.8, 12), new THREE.MeshStandardMaterial({color:0x2f8344, roughness:0.7}));
-  canopy.position.set(x, height*0.9, z);
-  environment.add(trunk);
-  environment.add(canopy);
-  addBoxCollider(x-0.45, 0, z-0.45, x+0.45, height*0.9, z+0.45);
-}
-[[ -14, -8 ], [ -10, -3 ], [ -6, 11 ], [ 6, 14 ], [ 12, 3 ], [ 15, -5 ]].forEach(([x,z], idx)=> createTree(x, z, 3.3 + (idx%3)*0.45));
-
-const pond = new THREE.Mesh(new THREE.CylinderGeometry(4.2,4.2,0.2,28), new THREE.MeshStandardMaterial({color:0x4ab6ff, transparent:true, opacity:0.82, roughness:0.12, metalness:0.32}));
-pond.position.set(-5,0.09,-12);
-environment.add(pond);
-addBoxCollider(-5-4.2, 0, -12-4.2, -5+4.2, 0.4, -12+4.2);
-
-const dock = new THREE.Mesh(new THREE.BoxGeometry(2.8,0.18,1.6), new THREE.MeshStandardMaterial({color:0x8b7252, roughness:0.85}));
-dock.position.set(-1.6,0.18,-12.2);
-environment.add(dock);
-addBoxCollider(dock.position.x-1.4, 0, dock.position.z-0.8, dock.position.x+1.4, dock.position.y+0.2, dock.position.z+0.8);
-
-const campfire = new THREE.Group();
-const fireRocks = new THREE.Mesh(new THREE.TorusGeometry(0.6,0.12,8,16), new THREE.MeshStandardMaterial({color:0x777777, roughness:0.9}));
-campfire.add(fireRocks);
-const flame = new THREE.Mesh(new THREE.ConeGeometry(0.28,0.7,8), new THREE.MeshStandardMaterial({color:0xffc164, emissive:0xff8632, emissiveIntensity:0.8, transparent:true, opacity:0.9}));
-flame.position.y = 0.45;
-campfire.add(flame);
-campfire.position.set(2.4,0,-3.6);
-environment.add(campfire);
-addBoxCollider(2.4-0.7,0,-3.6-0.7,2.4+0.7,0.8,-3.6+0.7);
-
-const bench = new THREE.Group();
-const benchSeat = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.12,0.42), new THREE.MeshStandardMaterial({color:0xa6855c, roughness:0.72}));
-benchSeat.position.y = 0.42;
-bench.add(benchSeat);
-const benchLegMaterial = new THREE.MeshStandardMaterial({color:0x57422d, roughness:0.8});
-[[ -0.7, -0.16 ], [ 0.7, -0.16 ], [ -0.7, 0.16 ], [ 0.7, 0.16 ]].forEach(([lx, lz])=>{
-  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.42,0.1), benchLegMaterial);
-  leg.position.set(lx,0.21,lz);
-  bench.add(leg);
-});
-bench.position.set(3.4,0,-2.4);
-bench.rotation.y = Math.PI/6;
-environment.add(bench);
-addBoxCollider(bench.position.x-0.9,0,bench.position.z-0.35, bench.position.x+0.9, bench.position.y+0.6, bench.position.z+0.35);
-
-const houseSteps = new THREE.Group();
-const stepMaterial = new THREE.MeshStandardMaterial({color:0x9f8a6f, roughness:0.7});
-for(let i=0;i<4;i++){
-  const step = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.34,1.2), stepMaterial);
-  step.position.set(7.1, 0.17 + i*0.32, -6.9 + i*0.88);
-  houseSteps.add(step);
-  addBoxCollider(step.position.x-0.8, 0, step.position.z-0.6, step.position.x+0.8, step.position.y+0.2, step.position.z+0.6);
-}
-const railing = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,2.2,8), new THREE.MeshStandardMaterial({color:0xceb27a, roughness:0.6}));
-railing.position.set(7.8,1.2,-4.8);
-railing.rotation.z = Math.PI/2.3;
-houseSteps.add(railing);
-houseSteps.position.x += 0.2;
-environment.add(houseSteps);
-
-const rooftopWalk = new THREE.Mesh(new THREE.BoxGeometry(1.8,0.18,4.4), new THREE.MeshStandardMaterial({color:0xcab99a, roughness:0.68}));
-rooftopWalk.position.set(8.6, 1.35, -4.3);
-rooftopWalk.rotation.y = -0.12;
-environment.add(rooftopWalk);
-addBoxCollider(rooftopWalk.position.x-0.9, rooftopWalk.position.y-0.1, rooftopWalk.position.z-2.2, rooftopWalk.position.x+0.9, rooftopWalk.position.y+0.2, rooftopWalk.position.z+2.2);
-const rooftopRamp = new THREE.Mesh(new THREE.BoxGeometry(1.2,0.22,1.6), new THREE.MeshStandardMaterial({color:0xbfa983, roughness:0.7}));
-rooftopRamp.position.set(9.2, 2.05, -2.8);
-environment.add(rooftopRamp);
-addBoxCollider(rooftopRamp.position.x-0.6, rooftopRamp.position.y-0.1, rooftopRamp.position.z-0.8, rooftopRamp.position.x+0.6, rooftopRamp.position.y+0.2, rooftopRamp.position.z+0.8);
-
-const lookoutPlatform = new THREE.Mesh(new THREE.BoxGeometry(3.2,0.24,2.6), new THREE.MeshStandardMaterial({color:0xb7a57a, roughness:0.75}));
-lookoutPlatform.position.set(9,2.45,-1.8);
-environment.add(lookoutPlatform);
-addBoxCollider(lookoutPlatform.position.x-1.6, lookoutPlatform.position.y, lookoutPlatform.position.z-1.3, lookoutPlatform.position.x+1.6, lookoutPlatform.position.y+0.4, lookoutPlatform.position.z+1.3);
-
-const signCanvas = document.createElement('canvas');
-signCanvas.width = 512;
-signCanvas.height = 256;
-const signCtx = signCanvas.getContext('2d');
-const signTexture = new THREE.CanvasTexture(signCanvas);
-signTexture.anisotropy = 4;
-const signMaterial = new THREE.MeshStandardMaterial({map: signTexture, transparent: true, roughness:0.82, metalness:0.12, side: THREE.DoubleSide});
-const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.3), signMaterial);
-signBoard.position.set(0,1.6,0.12);
-const signPostMaterial = new THREE.MeshStandardMaterial({color:0x8e6b42, roughness:0.9});
-const signPostLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,2.4,10), signPostMaterial);
-signPostLeft.position.set(-0.9,1.2,0);
-const signPostRight = signPostLeft.clone();
-signPostRight.position.x = 0.9;
-const signGroup = new THREE.Group();
-signGroup.add(signBoard);
-signGroup.add(signPostLeft);
-signGroup.add(signPostRight);
-const signBeam = new THREE.Mesh(new THREE.BoxGeometry(2.2,0.18,0.2), signPostMaterial);
-signBeam.position.set(0,2.2,0);
-signGroup.add(signBeam);
-signGroup.position.set(2.5,0,-14);
-environment.add(signGroup);
-addBoxCollider(signGroup.position.x - 0.5, 0, signGroup.position.z - 0.5, signGroup.position.x + 0.5, 2.6, signGroup.position.z + 0.5);
-
+let activeMapKey = 'alexland';
 let activeLobbyName = 'Alexland';
+let populationSignUpdater = ()=>{};
+
+function createAlexlandMap(){
+  const group = new THREE.Group();
+  const colliders = [];
+  const addCollider = (minX, minY, minZ, maxX, maxY, maxZ)=>{
+    colliders.push(new THREE.Box3(new THREE.Vector3(minX, minY, minZ), new THREE.Vector3(maxX, maxY, maxZ)));
+  };
+
+  const groundMaterial = new THREE.MeshStandardMaterial({color:0x3d9a4a, roughness:0.85, metalness:0.08});
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), groundMaterial);
+  ground.rotation.x = -Math.PI/2;
+  ground.receiveShadow = true;
+  group.add(ground);
+
+  const path = new THREE.Mesh(new THREE.PlaneGeometry(8,26), new THREE.MeshStandardMaterial({color:0x9a7b55, roughness:0.92, metalness:0.05}));
+  path.rotation.x = -Math.PI/2;
+  path.position.set(0,0.02,-9);
+  group.add(path);
+
+  const houseGroup = new THREE.Group();
+  const houseBase = new THREE.Mesh(new THREE.BoxGeometry(5.4,3.2,5.4), new THREE.MeshStandardMaterial({color:0xa0785a, roughness:0.72}));
+  houseBase.position.y = 1.6;
+  houseGroup.add(houseBase);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(4.3,2.8,4), new THREE.MeshStandardMaterial({color:0x7a2a22, roughness:0.45}));
+  roof.position.y = 3.8;
+  roof.rotation.y = Math.PI/4;
+  houseGroup.add(roof);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.2,2.2,0.2), new THREE.MeshStandardMaterial({color:0x3b281a, roughness:0.6}));
+  door.position.set(0,1.1,2.7);
+  houseGroup.add(door);
+  const windowMat = new THREE.MeshStandardMaterial({color:0x8fd5ff, emissive:0x1a2a33, emissiveIntensity:0.25, roughness:0.2});
+  const windowLeft = new THREE.Mesh(new THREE.PlaneGeometry(1.2,1.2), windowMat);
+  windowLeft.position.set(-1.6,1.6,2.71);
+  windowLeft.rotation.y = Math.PI;
+  houseGroup.add(windowLeft);
+  const windowRight = windowLeft.clone();
+  windowRight.position.x = 1.6;
+  houseGroup.add(windowRight);
+  houseGroup.position.set(9,0,-6);
+  group.add(houseGroup);
+  addCollider(9-2.8, 0, -6-2.8, 9+2.8, 2.2, -6+2.8);
+
+  const mountain = new THREE.Mesh(new THREE.ConeGeometry(7.5,10,6), new THREE.MeshStandardMaterial({color:0x61615f, roughness:0.96}));
+  mountain.position.set(-12,5,14);
+  group.add(mountain);
+  addCollider(-12-5, 0, 14-5, -12+5, 10, 14+5);
+
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4,0), new THREE.MeshStandardMaterial({color:0x5a534c, roughness:0.88}));
+  rock.position.set(-4,1.2,-3);
+  group.add(rock);
+  addCollider(-6.2,0,-5.2,-1.8,2.4,-0.8);
+
+  const shrubGeometry = new THREE.ConeGeometry(0.6,1.2,6);
+  const shrubMaterial = new THREE.MeshStandardMaterial({color:0x2f7c34, roughness:0.9});
+  [[ -2, -11 ], [ 5, -4 ], [ -8, 6 ], [ 3, 10 ], [ 11, -2 ]].forEach(([x,z])=>{
+    const shrub = new THREE.Mesh(shrubGeometry, shrubMaterial);
+    shrub.position.set(x,0.6,z);
+    group.add(shrub);
+  });
+
+  function createTree(x, z, height=3.6){
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.26,height*0.6,10), new THREE.MeshStandardMaterial({color:0x6b4b2a, roughness:0.8}));
+    trunk.position.set(x, height*0.3, z);
+    const canopy = new THREE.Mesh(new THREE.ConeGeometry(height*0.35, height*0.8, 12), new THREE.MeshStandardMaterial({color:0x2f8344, roughness:0.7}));
+    canopy.position.set(x, height*0.9, z);
+    group.add(trunk);
+    group.add(canopy);
+    addCollider(x-0.45, 0, z-0.45, x+0.45, height*0.9, z+0.45);
+  }
+  [[ -14, -8 ], [ -10, -3 ], [ -6, 11 ], [ 6, 14 ], [ 12, 3 ], [ 15, -5 ]].forEach(([x,z], idx)=> createTree(x, z, 3.3 + (idx%3)*0.45));
+
+  const pond = new THREE.Mesh(new THREE.CylinderGeometry(4.2,4.2,0.2,28), new THREE.MeshStandardMaterial({color:0x4ab6ff, transparent:true, opacity:0.82, roughness:0.12, metalness:0.32}));
+  pond.position.set(-5,0.09,-12);
+  group.add(pond);
+  addCollider(-5-4.2, 0, -12-4.2, -5+4.2, 0.4, -12+4.2);
+
+  const dock = new THREE.Mesh(new THREE.BoxGeometry(2.8,0.18,1.6), new THREE.MeshStandardMaterial({color:0x8b7252, roughness:0.85}));
+  dock.position.set(-1.6,0.18,-12.2);
+  group.add(dock);
+  addCollider(dock.position.x-1.4, 0, dock.position.z-0.8, dock.position.x+1.4, dock.position.y+0.2, dock.position.z+0.8);
+
+  const campfire = new THREE.Group();
+  const fireRocks = new THREE.Mesh(new THREE.TorusGeometry(0.6,0.12,8,16), new THREE.MeshStandardMaterial({color:0x777777, roughness:0.9}));
+  campfire.add(fireRocks);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.28,0.7,8), new THREE.MeshStandardMaterial({color:0xffc164, emissive:0xff8632, emissiveIntensity:0.8, transparent:true, opacity:0.9}));
+  flame.position.y = 0.45;
+  campfire.add(flame);
+  campfire.position.set(2.4,0,-3.6);
+  group.add(campfire);
+  addCollider(2.4-0.7,0,-3.6-0.7,2.4+0.7,0.8,-3.6+0.7);
+
+  const bench = new THREE.Group();
+  const benchSeat = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.12,0.42), new THREE.MeshStandardMaterial({color:0xa6855c, roughness:0.72}));
+  benchSeat.position.y = 0.42;
+  bench.add(benchSeat);
+  const benchLegMaterial = new THREE.MeshStandardMaterial({color:0x57422d, roughness:0.8});
+  [[ -0.7, -0.16 ], [ 0.7, -0.16 ], [ -0.7, 0.16 ], [ 0.7, 0.16 ]].forEach(([lx, lz])=>{
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.42,0.1), benchLegMaterial);
+    leg.position.set(lx,0.21,lz);
+    bench.add(leg);
+  });
+  bench.position.set(3.4,0,-2.4);
+  bench.rotation.y = Math.PI/6;
+  group.add(bench);
+  addCollider(bench.position.x-0.9,0,bench.position.z-0.35, bench.position.x+0.9, bench.position.y+0.6, bench.position.z+0.35);
+
+  const houseSteps = new THREE.Group();
+  const stepMaterial = new THREE.MeshStandardMaterial({color:0x9f8a6f, roughness:0.7});
+  for(let i=0;i<4;i++){
+    const step = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.34,1.2), stepMaterial);
+    step.position.set(7.1, 0.17 + i*0.32, -6.9 + i*0.88);
+    houseSteps.add(step);
+    addCollider(step.position.x-0.8, 0, step.position.z-0.6, step.position.x+0.8, step.position.y+0.2, step.position.z+0.6);
+  }
+  const railing = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,2.2,8), new THREE.MeshStandardMaterial({color:0xceb27a, roughness:0.6}));
+  railing.position.set(7.8,1.2,-4.8);
+  railing.rotation.z = Math.PI/2.3;
+  houseSteps.add(railing);
+  houseSteps.position.x += 0.2;
+  group.add(houseSteps);
+
+  const rooftopWalk = new THREE.Mesh(new THREE.BoxGeometry(1.8,0.18,4.4), new THREE.MeshStandardMaterial({color:0xcab99a, roughness:0.68}));
+  rooftopWalk.position.set(8.6, 1.35, -4.3);
+  rooftopWalk.rotation.y = -0.12;
+  group.add(rooftopWalk);
+  addCollider(rooftopWalk.position.x-0.9, rooftopWalk.position.y-0.1, rooftopWalk.position.z-2.2, rooftopWalk.position.x+0.9, rooftopWalk.position.y+0.2, rooftopWalk.position.z+2.2);
+  const rooftopRamp = new THREE.Mesh(new THREE.BoxGeometry(1.2,0.22,1.6), new THREE.MeshStandardMaterial({color:0xbfa983, roughness:0.7}));
+  rooftopRamp.position.set(9.2, 2.05, -2.8);
+  group.add(rooftopRamp);
+  addCollider(rooftopRamp.position.x-0.6, rooftopRamp.position.y-0.1, rooftopRamp.position.z-0.8, rooftopRamp.position.x+0.6, rooftopRamp.position.y+0.2, rooftopRamp.position.z+0.8);
+
+  const lookoutPlatform = new THREE.Mesh(new THREE.BoxGeometry(3.2,0.24,2.6), new THREE.MeshStandardMaterial({color:0xb7a57a, roughness:0.75}));
+  lookoutPlatform.position.set(9,2.45,-1.8);
+  group.add(lookoutPlatform);
+  addCollider(lookoutPlatform.position.x-1.6, lookoutPlatform.position.y, lookoutPlatform.position.z-1.3, lookoutPlatform.position.x+1.6, lookoutPlatform.position.y+0.4, lookoutPlatform.position.z+1.3);
+
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 256;
+  const signCtx = signCanvas.getContext('2d');
+  const signTexture = new THREE.CanvasTexture(signCanvas);
+  signTexture.anisotropy = 4;
+  if('colorSpace' in signTexture){
+    signTexture.colorSpace = THREE.SRGBColorSpace;
+  }
+  const signMaterial = new THREE.MeshStandardMaterial({map: signTexture, transparent: true, roughness:0.82, metalness:0.12, side:THREE.DoubleSide});
+  const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.3), signMaterial);
+  signBoard.position.set(0,1.6,0.12);
+  const signPostMaterial = new THREE.MeshStandardMaterial({color:0x8e6b42, roughness:0.9});
+  const signPostLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,2.4,10), signPostMaterial);
+  signPostLeft.position.set(-0.9,1.2,0);
+  const signPostRight = signPostLeft.clone();
+  signPostRight.position.x = 0.9;
+  const signGroup = new THREE.Group();
+  signGroup.add(signBoard);
+  signGroup.add(signPostLeft);
+  signGroup.add(signPostRight);
+  const signBeam = new THREE.Mesh(new THREE.BoxGeometry(2.2,0.18,0.2), signPostMaterial);
+  signBeam.position.set(0,2.2,0);
+  signGroup.add(signBeam);
+  signGroup.position.set(2.5,0,-14);
+  group.add(signGroup);
+  addCollider(signGroup.position.x - 0.5, 0, signGroup.position.z - 0.5, signGroup.position.x + 0.5, 2.6, signGroup.position.z + 0.5);
+
+  function updateSign(count, lobbyName = activeLobbyName){
+    const display = Math.max(1, Math.round(count));
+    const name = (lobbyName || 'Alexland').trim() || 'Alexland';
+    const key = `${display}|${name}`;
+    if(updateSign.last === key) return;
+    updateSign.last = key;
+    signCtx.fillStyle = '#2f6b24';
+    signCtx.fillRect(0,0,signCanvas.width,signCanvas.height);
+    signCtx.fillStyle = '#1c4815';
+    signCtx.fillRect(18,18,signCanvas.width-36,signCanvas.height-36);
+    signCtx.lineWidth = 6;
+    signCtx.strokeStyle = '#d7cfa2';
+    signCtx.strokeRect(18,18,signCanvas.width-36,signCanvas.height-36);
+    signCtx.fillStyle = '#f2eccb';
+    signCtx.textAlign = 'left';
+    signCtx.textBaseline = 'top';
+    const trimmed = name.length > 20 ? `${name.slice(0, 19)}…` : name;
+    const titleSize = trimmed.length > 14 ? 44 : 52;
+    const popSize = trimmed.length > 16 ? 38 : 44;
+    signCtx.font = `bold ${titleSize}px "Segoe UI", sans-serif`;
+    signCtx.fillText(`Welcome to ${trimmed}`, 32, 52);
+    signCtx.font = `bold ${popSize}px "Segoe UI", sans-serif`;
+    signCtx.fillText(`Population: ${display}`, 32, 140);
+    signTexture.needsUpdate = true;
+  }
+
+  return { group, colliders, updateSign };
+}
+
+function createDuelMap(){
+  const group = new THREE.Group();
+  const colliders = [];
+  const addCollider = (minX, minY, minZ, maxX, maxY, maxZ)=>{
+    colliders.push(new THREE.Box3(new THREE.Vector3(minX, minY, minZ), new THREE.Vector3(maxX, maxY, maxZ)));
+  };
+
+  const base = new THREE.Mesh(new THREE.PlaneGeometry(80,80), new THREE.MeshStandardMaterial({color:0x4a6b8c, roughness:0.8}));
+  base.rotation.x = -Math.PI/2;
+  group.add(base);
+
+  const borderMaterial = new THREE.MeshStandardMaterial({color:0x243247, roughness:0.6});
+  const borderHeight = 2.8;
+  const wallGeometry = new THREE.BoxGeometry(80, borderHeight, 2);
+  const northWall = new THREE.Mesh(wallGeometry, borderMaterial);
+  northWall.position.set(0, borderHeight/2, -39);
+  group.add(northWall);
+  addCollider(-40,0,-40,40,borderHeight,-38);
+  const southWall = northWall.clone();
+  southWall.position.z = 39;
+  group.add(southWall);
+  addCollider(-40,0,38,40,borderHeight,40);
+  const sideGeometry = new THREE.BoxGeometry(2, borderHeight, 80);
+  const westWall = new THREE.Mesh(sideGeometry, borderMaterial);
+  westWall.position.set(-39, borderHeight/2, 0);
+  group.add(westWall);
+  addCollider(-40,0,-40,-38,borderHeight,40);
+  const eastWall = westWall.clone();
+  eastWall.position.x = 39;
+  group.add(eastWall);
+  addCollider(38,0,-40,40,borderHeight,40);
+
+  const duelBuilding = new THREE.Group();
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(8,8,8), new THREE.MeshStandardMaterial({color:0x2f405a, roughness:0.75}));
+  tower.position.y = 4;
+  duelBuilding.add(tower);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(6,4,6), new THREE.MeshStandardMaterial({color:0xc7d8f0, roughness:0.4}));
+  roof.position.y = 8;
+  duelBuilding.add(roof);
+  duelBuilding.position.set(0,0,0);
+  group.add(duelBuilding);
+  addCollider(-4,0,-4,4,8,4);
+
+  const rampsMaterial = new THREE.MeshStandardMaterial({color:0x88a0bf, roughness:0.55});
+  const rampGeometry = new THREE.BoxGeometry(10,0.6,4);
+  const ramp1 = new THREE.Mesh(rampGeometry, rampsMaterial);
+  ramp1.rotation.z = -0.4;
+  ramp1.position.set(-12,1.2,-10);
+  group.add(ramp1);
+  addCollider(-17,0,-12,-7,2.4,-8);
+  const ramp2 = ramp1.clone();
+  ramp2.rotation.z = 0.4;
+  ramp2.position.set(12,1.2,-10);
+  group.add(ramp2);
+  addCollider(7,0,-12,17,2.4,-8);
+  const ramp3 = ramp1.clone();
+  ramp3.rotation.z = -0.4;
+  ramp3.position.set(-12,1.2,10);
+  group.add(ramp3);
+  addCollider(-17,0,8,-7,2.4,12);
+  const ramp4 = ramp2.clone();
+  ramp4.rotation.z = 0.4;
+  ramp4.position.set(12,1.2,10);
+  group.add(ramp4);
+  addCollider(7,0,8,17,2.4,12);
+
+  const pillars = new THREE.CylinderGeometry(1.2,1.2,6,12);
+  const pillarMaterial = new THREE.MeshStandardMaterial({color:0x1f2b3c, roughness:0.65});
+  [[-18, -18], [18, -18], [-18, 18], [18, 18]].forEach(([x,z])=>{
+    const pillar = new THREE.Mesh(pillars, pillarMaterial);
+    pillar.position.set(x,3,z);
+    group.add(pillar);
+    addCollider(x-1.2,0,z-1.2,x+1.2,6,z+1.2);
+  });
+
+  function updateSign(count, lobbyName){
+    let banner = group.getObjectByName('duelBanner');
+    if(!banner){
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(18,4), new THREE.MeshStandardMaterial({color:0x112033, emissive:0x204060, emissiveIntensity:0.4}));
+      plane.name = 'duelBanner';
+      plane.position.set(0,5,18.5);
+      group.add(plane);
+      banner = plane;
+    }
+    let canvas = banner.userData && banner.userData.canvas;
+    if(!canvas){
+      canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 256;
+      banner.userData = banner.userData || {};
+      banner.userData.canvas = canvas;
+      banner.userData.ctx = canvas.getContext('2d');
+      const texture = new THREE.CanvasTexture(canvas);
+      if('colorSpace' in texture){ texture.colorSpace = THREE.SRGBColorSpace; }
+      banner.material = new THREE.MeshStandardMaterial({map:texture, transparent:true, emissive:0x204060, emissiveIntensity:0.35});
+    }
+    const ctx = banner.userData.ctx;
+    const texture = banner.material.map;
+    ctx.fillStyle = '#0d1723';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#2d8bff';
+    ctx.font = 'bold 88px "Segoe UI", sans-serif';
+    ctx.fillText(lobbyName || 'Arena', 40, 110);
+    ctx.font = 'bold 72px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`Players Ready: ${count}`, 40, 200);
+    texture.needsUpdate = true;
+  }
+
+  return { group, colliders, updateSign };
+}
+
+function createSkylineMap(){
+  const group = new THREE.Group();
+  const colliders = [];
+  const addCollider = (minX, minY, minZ, maxX, maxY, maxZ)=>{
+    colliders.push(new THREE.Box3(new THREE.Vector3(minX, minY, minZ), new THREE.Vector3(maxX, maxY, maxZ)));
+  };
+
+  const base = new THREE.Mesh(new THREE.PlaneGeometry(120,120), new THREE.MeshStandardMaterial({color:0x1d1f29, roughness:0.7}));
+  base.rotation.x = -Math.PI/2;
+  group.add(base);
+
+  const fogMat = new THREE.MeshStandardMaterial({color:0x2a2d3a, roughness:0.9});
+  const rimGeometry = new THREE.TorusGeometry(60, 2.5, 16, 80);
+  const rim = new THREE.Mesh(rimGeometry, fogMat);
+  rim.rotation.x = Math.PI/2;
+  rim.position.y = -0.4;
+  group.add(rim);
+
+  const platformMaterial = new THREE.MeshStandardMaterial({color:0x414b63, roughness:0.55});
+  const central = new THREE.Mesh(new THREE.CylinderGeometry(8,8,1.2,24), platformMaterial);
+  central.position.set(0,0.6,0);
+  group.add(central);
+  addCollider(-8,0,-8,8,1.2,8);
+
+  const bridges = [
+    { pos:[0,0,18], rot:0 },
+    { pos:[18,0,0], rot:Math.PI/2 },
+    { pos:[-18,0,0], rot:Math.PI/2 },
+    { pos:[0,0,-18], rot:0 }
+  ];
+  bridges.forEach(({pos, rot})=>{
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(6,0.4,18), new THREE.MeshStandardMaterial({color:0x566b8e, roughness:0.6}));
+    bridge.position.set(pos[0],0.4,pos[2]);
+    bridge.rotation.y = rot;
+    group.add(bridge);
+    const halfX = Math.abs(Math.cos(rot)) > 0.5 ? 3 : 9;
+    const halfZ = Math.abs(Math.cos(rot)) > 0.5 ? 9 : 3;
+    addCollider(pos[0]-halfX,0,pos[2]-halfZ,pos[0]+halfX,0.8,pos[2]+halfZ);
+  });
+
+  const pads = [
+    [-26,0,26], [26,0,26], [-26,0,-26], [26,0,-26]
+  ];
+  pads.forEach(([x,y,z], idx)=>{
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(6,6,1,18), new THREE.MeshStandardMaterial({color: idx%2 ? 0x6fd0ff : 0xff6fa0, emissive: idx%2 ? 0x1a4a6d : 0x61183c, emissiveIntensity:0.35, roughness:0.4}));
+    pad.position.set(x,0.5,z);
+    group.add(pad);
+    addCollider(x-6,0,z-6,x+6,1,z+6);
+  });
+
+  const towerGeometry = new THREE.BoxGeometry(6, 18, 6);
+  const towerMat = new THREE.MeshStandardMaterial({color:0x2d3650, roughness:0.6});
+  [[0,18], [24,12], [-24,12]].forEach(([x,height])=>{
+    const tower = new THREE.Mesh(towerGeometry, towerMat);
+    tower.scale.y = height/18;
+    tower.position.set(x, height/2, -24);
+    group.add(tower);
+    addCollider(x-3,0,-27,x+3,height,-21);
+  });
+
+  const holoCanvas = document.createElement('canvas');
+  holoCanvas.width = 1024;
+  holoCanvas.height = 256;
+  const holoCtx = holoCanvas.getContext('2d');
+  const holoTexture = new THREE.CanvasTexture(holoCanvas);
+  if('colorSpace' in holoTexture){
+    holoTexture.colorSpace = THREE.SRGBColorSpace;
+  }
+  const holoPlane = new THREE.Mesh(new THREE.PlaneGeometry(20,4), new THREE.MeshStandardMaterial({map:holoTexture, transparent:true, emissive:0x2f7be4, emissiveIntensity:0.5}));
+  holoPlane.position.set(0,6,0);
+  group.add(holoPlane);
+
+  function updateSign(count, lobbyName){
+    holoCtx.clearRect(0,0,holoCanvas.width, holoCanvas.height);
+    const gradient = holoCtx.createLinearGradient(0,0,holoCanvas.width,0);
+    gradient.addColorStop(0,'#5fd6ff');
+    gradient.addColorStop(1,'#a66dff');
+    holoCtx.fillStyle = gradient;
+    holoCtx.fillRect(0,0,holoCanvas.width,holoCanvas.height);
+    holoCtx.fillStyle = '#0b1424';
+    holoCtx.font = 'bold 96px "Segoe UI", sans-serif';
+    holoCtx.fillText(lobbyName || 'Skyline Rush', 40, 110);
+    holoCtx.font = 'bold 72px "Segoe UI", sans-serif';
+    holoCtx.fillText(`Squad Count: ${count}`, 40, 210);
+    holoTexture.needsUpdate = true;
+  }
+
+  return { group, colliders, updateSign };
+}
+
+function buildEnvironment(mapKey='alexland'){
+  activeMapKey = mapKey;
+  const builders = {
+    alexland: createAlexlandMap,
+    duel: createDuelMap,
+    skyline: createSkylineMap
+  };
+  const builder = builders[mapKey] || builders.alexland;
+  const { group, colliders, updateSign } = builder();
+  while(environment.children.length){
+    environment.remove(environment.children[0]);
+  }
+  environment.add(group);
+  populationSignUpdater = typeof updateSign === 'function' ? updateSign : ()=>{};
+  staticColliders.length = 0;
+  colliders.forEach(box=> staticColliders.push(box));
+  registerForAlexland(group);
+  refreshAlexlandBaseline(group);
+  updatePopulationSign(Object.keys(remotePlayers).length + 1, activeLobbyName);
+}
 
 function updatePopulationSign(count, lobbyName = activeLobbyName){
-  if(!signCtx || !signTexture) return;
-  const display = Math.max(1, Math.round(count));
-  const name = (lobbyName || 'Alexland').trim() || 'Alexland';
-  const key = `${display}|${name}`;
-  if(updatePopulationSign.last === key) return;
-  updatePopulationSign.last = key;
-  signCtx.fillStyle = '#2f6b24';
-  signCtx.fillRect(0,0,signCanvas.width,signCanvas.height);
-  signCtx.fillStyle = '#1c4815';
-  signCtx.fillRect(18,18,signCanvas.width-36,signCanvas.height-36);
-  signCtx.lineWidth = 6;
-  signCtx.strokeStyle = '#d7cfa2';
-  signCtx.strokeRect(18,18,signCanvas.width-36,signCanvas.height-36);
-  signCtx.fillStyle = '#f2eccb';
-  signCtx.textAlign = 'left';
-  signCtx.textBaseline = 'top';
-  const trimmed = name.length > 20 ? `${name.slice(0, 19)}…` : name;
-  const titleSize = trimmed.length > 14 ? 44 : 52;
-  const popSize = trimmed.length > 16 ? 38 : 44;
-  signCtx.font = `bold ${titleSize}px "Segoe UI", sans-serif`;
-  signCtx.fillText(`Welcome to ${trimmed}`, 32, 52);
-  signCtx.font = `bold ${popSize}px "Segoe UI", sans-serif`;
-  signCtx.fillText(`Population: ${display}`, 32, 140);
-  signTexture.needsUpdate = true;
+  if(typeof populationSignUpdater === 'function'){
+    populationSignUpdater(count, lobbyName);
+  }
 }
-updatePopulationSign(1, activeLobbyName);
-registerForAlexland(environment);
 
 function setActiveLobbyName(name){
   activeLobbyName = (name && name.trim()) ? name.trim() : 'Alexland';
   updatePopulationSign(Object.keys(remotePlayers).length + 1, activeLobbyName);
+  updateLobbyStageTitle(activeLobbyName);
 }
+
+buildEnvironment('alexland');
 
 function resolveWorldCollisions(nextPosition){
   const adjusted = nextPosition.clone();
@@ -620,6 +950,16 @@ const lobbyListEl = document.getElementById('lobbyList');
 const lobbyDetailNameEl = document.getElementById('lobbyDetailName');
 const lobbyDetailMetaEl = document.getElementById('lobbyDetailMeta');
 const lobbyPlayersEl = document.getElementById('lobbyPlayers');
+const lobbyStageEl = document.getElementById('lobbyStage');
+const lobbyStageTitleEl = document.getElementById('lobbyStageTitle');
+const lobbyStageStatusEl = document.getElementById('lobbyStageStatus');
+const lobbyRosterListEl = document.getElementById('lobbyRosterList');
+const lobbyModeInputs = Array.from(document.querySelectorAll('input[name="lobbyMode"]'));
+const lobbyMapSelect = document.getElementById('lobbyMapSelect');
+const lobbyFriendlyFireInput = document.getElementById('lobbyFriendlyFire');
+const lobbyReadyButton = document.getElementById('lobbyReadyButton');
+const lobbyStartButton = document.getElementById('lobbyStartButton');
+const lobbyLeaveButton = document.getElementById('lobbyLeaveButton');
 const weaponWheelEl = document.getElementById('weaponWheel');
 const touchControlsEl = document.getElementById('touchControls');
 const touchMoveEl = document.getElementById('touchMove');
@@ -644,8 +984,29 @@ const waveBannerEl = document.getElementById('waveBanner');
 const pauseMenuEl = document.getElementById('pauseMenu');
 const btnResume = document.getElementById('btnResume');
 const btnPauseMenu = document.getElementById('btnPauseMenu');
+const pauseNameInput = document.getElementById('pauseNameInput');
+const pauseColorInput = document.getElementById('pauseColorInput');
 const parryFlashEl = document.getElementById('parryFlash');
 let remotePlayers = {}; // peerId -> state
+const defaultGameOptions = Object.freeze({ mode:'classic', map:'alexland', friendlyFire:false });
+let lobbyGameOptions = { ...defaultGameOptions };
+let activeGameOptions = { ...defaultGameOptions };
+let friendlyFireEnabled = false;
+let lobbyPlayersState = new Map();
+let lobbyPingState = new Map();
+let lobbyHostId = null;
+let lobbyStageOpen = false;
+let localReadyState = false;
+let localJoinOrder = 0;
+let lobbyReadyMap = new Map();
+const LOBBY_PING_INTERVAL = 5000;
+let lobbyPingTimer = 0;
+
+function isPlayerShotOwner(ownerId){
+  if(!ownerId) return false;
+  if(ownerId === player.id) return true;
+  return !!remotePlayers[ownerId];
+}
 
 const DEFAULT_SIGNALING_URL = 'wss://unswarming-etha-unscanned.ngrok-free.dev';
 const NETWORK_STORAGE_KEY = 'alex-network-settings';
@@ -843,6 +1204,9 @@ function applyCustomCubeColor(hex){
   if(cubeColorInput && cubeColorInput.value !== hex){
     cubeColorInput.value = hex;
   }
+  if(pauseColorInput && pauseColorInput.value !== hex){
+    pauseColorInput.value = hex;
+  }
   applyColorToPlayerMesh(hex);
   if(typeof playerTemplates !== 'undefined'){
     playerTemplates.low = createLowPlayerTemplate();
@@ -855,6 +1219,24 @@ function applyCustomCubeColor(hex){
   }
 }
 
+function setPlayerDisplayName(name, options={}){
+  const trimmed = (name || '').trim() || 'Player';
+  player.name = trimmed;
+  if(nameInput && nameInput.value !== trimmed){
+    nameInput.value = trimmed;
+  }
+  if(menuPlayerNameInput && menuPlayerNameInput.value !== trimmed){
+    menuPlayerNameInput.value = trimmed;
+  }
+  if(pauseNameInput && pauseNameInput.value !== trimmed){
+    pauseNameInput.value = trimmed;
+  }
+  if(options.persist !== false){
+    savePersistedNetworkSettings({ name: trimmed });
+  }
+  updatePlayers();
+}
+
 const weaponConfigs = [
   {
     id: 1,
@@ -863,6 +1245,9 @@ const weaponConfigs = [
     type: 'pulse',
     fireInterval: 0.22,
     firePoseDuration: 0.14,
+    chargeCost: 0.25,
+    rechargeTime: 1.4,
+    rechargeLabel: 'Charging capacitors',
     sway: {amplitude: 0.012, speed: 3.4, tilt: 0.02},
     appearance: {color: 0xffff66, emissive: 0x332200, emissiveIntensity: 0.55, length: 0.95, thickness: 0.95},
     poses: {
@@ -870,6 +1255,11 @@ const weaponConfigs = [
         left: {pos: [-0.32, -0.08, -0.32], rot: [-0.35, 0.25, 1.4]},
         right: {pos: [0.22, -0.12, -0.4], rot: [-0.45, -0.05, -1.45]},
         weapon: {pos: [0, -0.1, -0.5], rot: [-0.08, 0, 0]}
+      },
+      recharge: {
+        left: {pos: [-0.3, -0.12, -0.38], rot: [-0.18, 0.32, 1.48]},
+        right: {pos: [0.2, -0.2, -0.48], rot: [-0.3, -0.1, -1.52]},
+        weapon: {pos: [0, -0.16, -0.64], rot: [-0.26, 0.06, 0]}
       },
       fire: {
         left: {pos: [-0.3, -0.05, -0.25], rot: [-0.25, 0.4, 1.3]},
@@ -885,6 +1275,9 @@ const weaponConfigs = [
     type: 'rocket',
     fireInterval: 0.95,
     firePoseDuration: 0.28,
+    chargeCost: 0.5,
+    rechargeTime: 2.6,
+    rechargeLabel: 'Reloading rockets',
     sway: {amplitude: 0.008, speed: 2.6, tilt: 0.018},
     appearance: {color: 0xff5a2f, emissive: 0x401000, emissiveIntensity: 0.65, length: 1.35, thickness: 1.25},
     poses: {
@@ -892,6 +1285,11 @@ const weaponConfigs = [
         left: {pos: [-0.28, -0.18, -0.24], rot: [-0.2, 0.1, 1.55]},
         right: {pos: [0.15, -0.25, -0.34], rot: [-0.1, -0.2, -1.45]},
         weapon: {pos: [0, -0.22, -0.58], rot: [0.1, 0.05, 0]}
+      },
+      recharge: {
+        left: {pos: [-0.26, -0.2, -0.32], rot: [-0.05, 0.22, 1.48]},
+        right: {pos: [0.16, -0.3, -0.42], rot: [0.08, -0.22, -1.5]},
+        weapon: {pos: [0, -0.28, -0.68], rot: [0.18, 0.08, 0.08]}
       },
       fire: {
         left: {pos: [-0.26, -0.16, -0.18], rot: [-0.1, 0.18, 1.4]},
@@ -907,6 +1305,9 @@ const weaponConfigs = [
     type: 'scatter',
     fireInterval: 0.58,
     firePoseDuration: 0.2,
+    chargeCost: 0.4,
+    rechargeTime: 1.8,
+    rechargeLabel: 'Cycling drum',
     sway: {amplitude: 0.014, speed: 3.1, tilt: 0.024},
     appearance: {color: 0xfff1c1, emissive: 0x3a2c15, emissiveIntensity: 0.45, length: 1.05, thickness: 1.1},
     poses: {
@@ -914,6 +1315,11 @@ const weaponConfigs = [
         left: {pos: [-0.34, -0.12, -0.3], rot: [-0.55, 0.28, 1.7]},
         right: {pos: [0.2, -0.16, -0.38], rot: [-0.65, -0.12, -1.6]},
         weapon: {pos: [0, -0.14, -0.54], rot: [-0.28, 0, 0]}
+      },
+      recharge: {
+        left: {pos: [-0.33, -0.14, -0.4], rot: [-0.38, 0.35, 1.65]},
+        right: {pos: [0.2, -0.18, -0.46], rot: [-0.52, -0.08, -1.55]},
+        weapon: {pos: [0, -0.18, -0.62], rot: [-0.34, 0.06, 0.02]}
       },
       fire: {
         left: {pos: [-0.32, -0.09, -0.24], rot: [-0.42, 0.4, 1.55]},
@@ -929,6 +1335,9 @@ const weaponConfigs = [
     type: 'pee',
     fireInterval: 0.12,
     firePoseDuration: 0.1,
+    chargeCost: 0.08,
+    rechargeTime: 2.2,
+    rechargeLabel: 'Drinking water',
     sway: {amplitude: 0.018, speed: 4.2, tilt: 0.03},
     appearance: {color: 0xfff57a, emissive: 0x463800, emissiveIntensity: 0.35, length: 1.2, thickness: 0.75},
     stream: {count: 8, spreadYaw: 0.26, spreadPitch: 0.2, speed: 12, size: 0.06, damage: 0.03, ttl: 0.6, hitRadius: 0.28, gravity: 4.2},
@@ -937,6 +1346,11 @@ const weaponConfigs = [
         left: {pos: [-0.18, -0.07, -0.44], rot: [-0.35, 0.05, 1.2]},
         right: {pos: [0.08, -0.1, -0.52], rot: [-0.4, -0.04, -1.2]},
         weapon: {pos: [0, -0.06, -0.72], rot: [-0.45, 0, 0]}
+      },
+      recharge: {
+        left: {pos: [-0.2, 0.02, -0.36], rot: [-0.18, 0.28, 1.42]},
+        right: {pos: [0.06, 0.06, -0.28], rot: [-0.92, -0.18, -1.12]},
+        weapon: {pos: [0, -0.14, -0.78], rot: [-0.6, 0, 0]}
       },
       fire: {
         left: {pos: [-0.16, -0.06, -0.4], rot: [-0.2, 0.12, 1.05]},
@@ -1415,15 +1829,17 @@ function buildAccessoryGroup(def, humanoid){
 
 let armRig = null;
 
+let allowedWeaponIds = weaponConfigs.map(cfg=>cfg.id);
 const weaponWheelState = {
   open: false,
   pointer: {x: innerWidth/2, y: innerHeight/2},
   selected: 0,
-  options: weaponConfigs.map(cfg=>({id:cfg.id, label:cfg.label, desc:cfg.desc})),
+  options: weaponConfigs.filter(cfg=>allowedWeaponIds.includes(cfg.id)).map(cfg=>({id:cfg.id, label:cfg.label, desc:cfg.desc})),
   optionEls: [],
   centerEl: null
 };
 const shootState = {down:false, cooldown:0, mouseDown:false};
+const weaponState = {charge:1, recharging:false, rechargeTimer:0, rechargeDuration:0, label:''};
 const punchState = {cooldown:0, timer:0, hit:false, parryWindow:0};
 const parryState = {
   flash: 0,
@@ -1659,6 +2075,41 @@ function buildWeaponWheel(){
   updateWeaponWheelHighlight();
 }
 
+function setAllowedWeapons(ids){
+  const fallback = weaponConfigs.map(cfg=>cfg.id);
+  const list = Array.isArray(ids) && ids.length ? ids.filter(id=>weaponConfigById.has(id)) : fallback;
+  allowedWeaponIds = list.length ? list : fallback;
+  weaponWheelState.options = weaponConfigs.filter(cfg=>allowedWeaponIds.includes(cfg.id)).map(cfg=>({id:cfg.id, label:cfg.label, desc:cfg.desc}));
+  if(weaponWheelEl){
+    buildWeaponWheel();
+  }
+  if(!allowedWeaponIds.includes(player.weapon)){
+    equipWeapon(allowedWeaponIds[0], { immediate:true });
+  }
+}
+
+function resetWeaponState(){
+  weaponState.charge = 1;
+  weaponState.recharging = false;
+  weaponState.rechargeTimer = 0;
+  weaponState.rechargeDuration = 0;
+  weaponState.label = '';
+  if(armRig && typeof armRig.endRecharge === 'function'){
+    armRig.endRecharge();
+  }
+}
+
+function triggerWeaponRecharge(cfg){
+  const rechargeTime = cfg?.rechargeTime ?? 1.5;
+  weaponState.recharging = true;
+  weaponState.rechargeTimer = rechargeTime;
+  weaponState.rechargeDuration = rechargeTime;
+  weaponState.label = cfg?.rechargeLabel || 'Recharging';
+  if(armRig && typeof armRig.beginRecharge === 'function'){
+    armRig.beginRecharge(cfg);
+  }
+}
+
 function positionWeaponWheelOptions(){
   const center = 130;
   const radius = 90;
@@ -1768,6 +2219,7 @@ function equipWeapon(id, options={}){
   if(typeof player !== 'undefined'){
     player.weapon = id;
   }
+  resetWeaponState();
   const idx = weaponWheelState.options.findIndex(opt=>opt.id===id);
   if(idx>=0){
     weaponWheelState.selected = idx;
@@ -1796,6 +2248,17 @@ function createArmRig(){
   const right = new THREE.Group();
   const rightMesh = new THREE.Mesh(armGeometry, skinMaterial.clone());
   right.add(rightMesh);
+  const jugGroup = new THREE.Group();
+  const jugMaterial = new THREE.MeshStandardMaterial({color:0x7fd2ff, transparent:true, opacity:0.65, roughness:0.35, metalness:0.25, emissive:0x1b3d6f, emissiveIntensity:0.2});
+  const jugBody = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.46, 16, 1, true), jugMaterial);
+  jugBody.position.y = -0.18;
+  jugGroup.add(jugBody);
+  const jugCap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 12), new THREE.MeshStandardMaterial({color:0x2a5adf, roughness:0.2, metalness:0.35}));
+  jugCap.position.y = 0.04;
+  jugGroup.add(jugCap);
+  jugGroup.visible = false;
+  jugGroup.position.set(0.08, -0.08, -0.06);
+  right.add(jugGroup);
 
   const weapon = new THREE.Group();
   const weaponGeometry = new THREE.CylinderGeometry(0.08, 0.08, 1, 18);
@@ -1843,17 +2306,23 @@ function createArmRig(){
     weapon,
     weaponMesh,
     weaponMaterial,
+    hydrationJug: jugGroup,
     weaponId: 1,
     fireTimer: 0,
     fireTimerTotal: 0,
     time: 0,
+    rechargeTime: 0,
     skinMaterials: [leftMesh.material, rightMesh.material],
+    recharging: false,
+    rechargeCfg: null,
     setWeapon(id, immediate){
       if(!weaponConfigById.has(id)) return;
       this.weaponId = id;
       this.time = 0;
       this.fireTimer = 0;
       this.fireTimerTotal = 0;
+      this.weapon.visible = true;
+      if(this.hydrationJug){ this.hydrationJug.visible = false; }
       const cfg = weaponConfigById.get(id) || weaponConfigs[0];
       const appearance = cfg.appearance || weaponConfigs[0].appearance;
       if(appearance){
@@ -1889,11 +2358,38 @@ function createArmRig(){
       this.fireTimerTotal = this.fireTimer;
       this.applyPose('fire');
     },
+    beginRecharge(cfg){
+      this.recharging = true;
+      this.rechargeCfg = cfg || weaponConfigById.get(this.weaponId);
+      this.rechargeTime = 0;
+      const rechargeType = this.rechargeCfg?.type;
+      if(rechargeType === 'pee'){
+        this.weapon.visible = false;
+        if(this.hydrationJug) this.hydrationJug.visible = true;
+      } else {
+        this.weapon.visible = true;
+        if(this.hydrationJug) this.hydrationJug.visible = false;
+      }
+      this.applyPose('recharge');
+    },
+    endRecharge(){
+      this.recharging = false;
+      this.rechargeCfg = null;
+      this.rechargeTime = 0;
+      this.weapon.visible = true;
+      if(this.hydrationJug) this.hydrationJug.visible = false;
+      this.applyPose('idle');
+    },
     update(dt){
       if(typeof player !== 'undefined'){
         group.visible = !player.thirdPerson;
       }
       this.time += dt;
+      if(this.recharging){
+        this.rechargeTime += dt;
+      } else if(this.rechargeTime !== 0){
+        this.rechargeTime = 0;
+      }
       const lerpAlpha = Math.max(0, Math.min(1, dt * 12));
       left.position.lerp(leftTarget.pos, lerpAlpha);
       left.quaternion.slerp(leftTarget.quat, lerpAlpha);
@@ -1922,6 +2418,24 @@ function createArmRig(){
         if(this.fireTimer <= 0){
           this.applyPose('idle');
         }
+      }
+      if(this.recharging){
+        const lift = 0.02 + Math.sin(this.time * 3) * 0.01;
+        if(this.rechargeCfg && this.rechargeCfg.type === 'pee'){
+          if(this.hydrationJug){
+            this.hydrationJug.rotation.x = -0.45 + Math.sin(this.time * 2.6) * 0.16;
+            this.hydrationJug.rotation.y = Math.sin(this.time * 3.4) * 0.08;
+          }
+          left.position.y += lift * 0.2;
+          right.position.y += lift * 0.3;
+        } else {
+          weapon.position.y += lift;
+          left.position.y += lift * 0.6;
+          right.position.y += lift * 0.6;
+          weapon.rotation.z = Math.sin(this.time * 2.8) * 0.06;
+        }
+      } else if(this.hydrationJug){
+        this.hydrationJug.rotation.set(0,0,0);
       }
     }
   };
@@ -1992,7 +2506,7 @@ const player = {
   stealthTimer: 0,
   parryActive: false
 };
-player.name = (nameInput?.value || player.name || 'Player');
+setPlayerDisplayName(nameInput?.value || player.name || 'Player', { persist: false });
 
 function applyColorToPlayerMesh(hex){
   if(!alexMesh) return;
@@ -2614,6 +3128,7 @@ function showWaveAnnouncement(text, duration=1800){
 }
 
 function startNextWave(fromMenu=false){
+  if(activeGameOptions.mode !== 'classic') return;
   if(nextWaveTimeout){ clearTimeout(nextWaveTimeout); nextWaveTimeout = null; }
   waveState.current += 1;
   waveState.active = true;
@@ -2638,12 +3153,86 @@ function finishWave(){
   showWaveAnnouncement(`Wave ${waveState.current} cleared!`, 2200);
   playSound('wave', {pitch:1.2});
   updateHUD();
-  if(nextWaveTimeout){ clearTimeout(nextWaveTimeout); }
-  nextWaveTimeout = setTimeout(()=>{
-    if(player.alive && !menuOpen){
-      startNextWave();
-    }
-  }, 2800);
+  if(activeGameOptions.mode === 'classic'){
+    if(nextWaveTimeout){ clearTimeout(nextWaveTimeout); }
+    nextWaveTimeout = setTimeout(()=>{
+      if(player.alive && !menuOpen){
+        startNextWave();
+      }
+    }, 2800);
+  }
+}
+
+function resetCombatState(){
+  bullets.forEach(b=>scene.remove(b));
+  bullets.length = 0;
+  enemies.forEach(e=>enemyGroup.remove(e));
+  enemies.length = 0;
+  waveState.active = false;
+  waveState.pendingSpawns = 0;
+  waveState.spawnTimer = 0;
+}
+
+function prepareMatchEnvironment(options={}){
+  const settings = { ...defaultGameOptions, ...options };
+  activeGameOptions = settings;
+  buildEnvironment(settings.map || 'alexland');
+  friendlyFireEnabled = !!settings.friendlyFire;
+  if(settings.mode === 'pee'){
+    setAllowedWeapons([4]);
+  } else {
+    setAllowedWeapons(null);
+  }
+  updateHUD();
+}
+
+function startClassicMatch(){
+  resetCombatState();
+  waveState.current = 0;
+  waveState.kills = 0;
+  waveState.killTarget = 0;
+  score = 0;
+  player.hp = 3;
+  player.alive = true;
+  gameHasStarted = true;
+  startNextWave(true);
+}
+
+function startDeathmatchMatch({ restrictPee=false }={}){
+  resetCombatState();
+  waveState.current = 0;
+  waveState.kills = 0;
+  waveState.killTarget = 0;
+  waveState.active = false;
+  score = 0;
+  if(restrictPee){
+    setAllowedWeapons([4]);
+  } else {
+    setAllowedWeapons(null);
+  }
+  gameHasStarted = true;
+  updateHUD();
+}
+
+function startMatchFromOptions(options){
+  let settings = { ...defaultGameOptions, ...(options || {}) };
+  if(settings.mode === 'random'){
+    const modes = ['classic','deathmatch','pee'];
+    const maps = ['alexland','duel','skyline'];
+    const mode = modes[Math.floor(Math.random()*modes.length)];
+    const map = maps[Math.floor(Math.random()*maps.length)];
+    const friendly = Math.random() < 0.4;
+    settings = { ...settings, mode, map, friendlyFire: friendly };
+  }
+  activeGameOptions = settings;
+  prepareMatchEnvironment(activeGameOptions);
+  if(activeGameOptions.mode === 'pee'){
+    startDeathmatchMatch({ restrictPee:true });
+  } else if(activeGameOptions.mode === 'deathmatch'){
+    startDeathmatchMatch({ restrictPee:false });
+  } else {
+    startClassicMatch();
+  }
 }
 
 function chooseEnemyType(){
@@ -3171,6 +3760,9 @@ function enemyShoot(enemy, targetInfo){
     hitRadius: 0.42
   };
   spawnBulletFromShot(shot, enemy.uuid || 'enemy');
+  if(isHost){
+    broadcast({ t:'enemy_shoot', shot, enemyId: enemy.uuid || 'enemy' });
+  }
   playSound('shoot', {pitch:0.8});
 }
 
@@ -3178,8 +3770,14 @@ function shoot(){
   if(!player.alive || weaponWheelState.open) return false;
   const cfg = weaponConfigById.get(player.weapon) || weaponConfigs[0];
   const interval = cfg.fireInterval ?? 0.3;
+  if(weaponState.recharging) return false;
   if(shootState.cooldown > 0) return false;
   shootState.cooldown = interval;
+  const cost = cfg.chargeCost ?? 0.2;
+  if(weaponState.charge < cost){
+    triggerWeaponRecharge(cfg);
+    return false;
+  }
   const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
   const origin = player.thirdPerson ? player.pos.clone().add(new THREE.Vector3(0,0.7,0)) : camera.getWorldPosition(new THREE.Vector3());
   const shots = createShotsForWeapon(cfg, origin, dir);
@@ -3188,6 +3786,10 @@ function shoot(){
     spawnBulletFromShot(shot, player.id);
     serialized.push({...shot});
   });
+  weaponState.charge = Math.max(0, weaponState.charge - cost);
+  if(weaponState.charge <= 0){
+    triggerWeaponRecharge(cfg);
+  }
   const weaponId = cfg?.id ?? player.weapon;
   sendData({t:'shoot', w: weaponId, shots: serialized});
   if(armRig) armRig.triggerFire();
@@ -3220,7 +3822,19 @@ let score = 0;
 function updateHUD(){
   const waveText = waveState.active ? `Wave ${waveState.current} (${Math.max(0, waveState.killTarget - waveState.kills)} left)` : (waveState.current > 0 ? `Wave ${waveState.current} ready` : 'Wave 0');
   const hpValue = Number.isFinite(player.hp) ? (Math.abs(player.hp % 1) < 1e-2 ? player.hp.toFixed(0) : player.hp.toFixed(1)) : '0';
-  hud.textContent = `Score: ${score} | ${waveText} | Enemies: ${enemies.length} | HP: ${hpValue} | Signaling: ${connectionLabel}`;
+  let modeLabel = activeGameOptions.mode === 'deathmatch' ? 'Deathmatch' : activeGameOptions.mode === 'pee' ? 'Pee Deathmatch' : `Wave ${waveState.current}`;
+  if(activeGameOptions.mode === 'classic'){ modeLabel = waveText; }
+  let weaponStatus = '';
+  if(weaponState.recharging){
+    const remaining = Math.max(0, weaponState.rechargeTimer || 0);
+    const total = Math.max(remaining, weaponState.rechargeDuration || 0);
+    const percent = total > 0 ? Math.round(((total - remaining) / total) * 100) : 0;
+    const label = weaponState.label || 'Recharging';
+    const timeText = remaining > 0 ? ` (${remaining.toFixed(1)}s)` : '';
+    const pctText = total > 0 ? ` [${Math.max(0, Math.min(100, percent))}%]` : '';
+    weaponStatus = ` | ${label}${timeText}${pctText}`;
+  }
+  hud.textContent = `Score: ${score} | ${modeLabel} | Enemies: ${enemies.length} | HP: ${hpValue} | Signaling: ${connectionLabel}${weaponStatus}`;
 }
 function updatePlayers(){
   let txt = `Players: ${nameInput.value || player.name || 'me'}`;
@@ -3232,6 +3846,276 @@ function updatePlayers(){
   }
   playersDiv.textContent = txt;
   updatePopulationSign(count, activeLobbyName);
+}
+
+function getLobbyPlayersArray(){
+  return Array.from(lobbyPlayersState.values()).sort((a,b)=>{
+    if(a.joinOrder !== b.joinOrder){
+      return a.joinOrder - b.joinOrder;
+    }
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function renderLobbyRoster(){
+  if(!lobbyRosterListEl) return;
+  lobbyRosterListEl.innerHTML = '';
+  const players = getLobbyPlayersArray();
+  if(!players.length){
+    const empty = document.createElement('div');
+    empty.textContent = 'Waiting for players…';
+    empty.style.opacity = '0.7';
+    lobbyRosterListEl.appendChild(empty);
+    return;
+  }
+  players.forEach(player=>{
+    const row = document.createElement('div');
+    row.className = 'lobby-roster-entry';
+    const nameWrap = document.createElement('div');
+    nameWrap.className = 'name';
+    if(player.id === lobbyHostId){
+      const crown = document.createElement('span');
+      crown.className = 'crown';
+      crown.textContent = '👑';
+      nameWrap.appendChild(crown);
+    }
+    if(player.color){
+      const swatch = document.createElement('span');
+      swatch.style.display = 'inline-block';
+      swatch.style.width = '10px';
+      swatch.style.height = '10px';
+      swatch.style.borderRadius = '2px';
+      swatch.style.margin = '0 6px 0 4px';
+      swatch.style.border = '1px solid rgba(255,255,255,0.35)';
+      swatch.style.background = player.color;
+      nameWrap.appendChild(swatch);
+    }
+    const nameLabel = document.createElement('span');
+    nameLabel.textContent = player.name || player.id;
+    nameWrap.appendChild(nameLabel);
+    if(player.ready){
+      const readyTag = document.createElement('span');
+      readyTag.textContent = 'READY';
+      readyTag.style.fontSize = '11px';
+      readyTag.style.marginLeft = '8px';
+      readyTag.style.padding = '2px 6px';
+      readyTag.style.borderRadius = '999px';
+      readyTag.style.background = 'rgba(124,196,255,0.25)';
+      readyTag.style.color = '#aee8ff';
+      nameWrap.appendChild(readyTag);
+    }
+    row.appendChild(nameWrap);
+    const ping = document.createElement('div');
+    ping.className = 'ping';
+    const latency = lobbyPingState.get(player.id);
+    ping.textContent = latency ? `${latency} ms` : '—';
+    row.appendChild(ping);
+    lobbyRosterListEl.appendChild(row);
+  });
+  updateLobbyButtons();
+}
+
+function setLobbyStageVisible(open){
+  lobbyStageOpen = !!open;
+  if(lobbyStageEl){
+    lobbyStageEl.classList.toggle('open', lobbyStageOpen);
+  }
+  if(lobbyStageOpen){
+    renderLobbyRoster();
+    syncLobbyOptionUI();
+  }
+  setMenuOpen(lobbyStageOpen);
+}
+
+function updateLobbyStageStatus(text){
+  if(!lobbyStageStatusEl) return;
+  if(text){
+    lobbyStageStatusEl.textContent = text;
+    return;
+  }
+  const players = getLobbyPlayersArray();
+  const readyCount = players.filter(p=>p.ready).length;
+  lobbyStageStatusEl.textContent = `${readyCount}/${players.length || 1} ready`;
+}
+
+function syncLobbyOptionUI(){
+  const isHostClient = !!(player && player.id && lobbyHostId === player.id && isHost);
+  lobbyModeInputs.forEach(input=>{
+    input.checked = input.value === lobbyGameOptions.mode;
+    input.disabled = !isHostClient;
+  });
+  if(lobbyMapSelect){
+    lobbyMapSelect.value = lobbyGameOptions.map;
+    lobbyMapSelect.disabled = !isHostClient;
+  }
+  if(lobbyFriendlyFireInput){
+    lobbyFriendlyFireInput.checked = !!lobbyGameOptions.friendlyFire;
+    lobbyFriendlyFireInput.disabled = !isHostClient;
+  }
+  if(lobbyStartButton){
+    lobbyStartButton.disabled = !isHostClient;
+  }
+}
+
+function updateLobbyButtons(){
+  if(lobbyReadyButton){
+    lobbyReadyButton.textContent = localReadyState ? 'Cancel Ready' : 'Ready Up';
+    lobbyReadyButton.classList.toggle('active', localReadyState);
+  }
+  if(lobbyStartButton){
+    const players = getLobbyPlayersArray();
+    const allReady = players.length > 0 && players.every(p=>p.ready);
+    const hostClient = player && player.id === lobbyHostId && isHost;
+    lobbyStartButton.disabled = !(hostClient && allReady);
+    if(allReady){
+      updateLobbyStageStatus('All players ready!');
+    } else {
+      updateLobbyStageStatus();
+    }
+  }
+}
+
+function updateLobbyOptionsFromUI(){
+  const modeInput = lobbyModeInputs.find(input=>input.checked);
+  if(modeInput){
+    lobbyGameOptions.mode = modeInput.value;
+  }
+  if(lobbyMapSelect){
+    lobbyGameOptions.map = lobbyMapSelect.value;
+  }
+  if(lobbyFriendlyFireInput){
+    lobbyGameOptions.friendlyFire = lobbyFriendlyFireInput.checked;
+  }
+}
+
+function upsertLobbyPlayer(id, data={}){
+  if(!id) return;
+  const prev = lobbyPlayersState.get(id) || {};
+  const joinOrder = prev.joinOrder ?? data.joinOrder ?? (Date.now() + Math.random());
+  const next = {
+    id,
+    name: data.name ?? prev.name ?? id,
+    ready: data.ready ?? prev.ready ?? false,
+    joinOrder,
+    color: data.color ?? prev.color ?? null
+  };
+  lobbyPlayersState.set(id, next);
+  if(!lobbyPingState.has(id)){ lobbyPingState.set(id, null); }
+  if(typeof data.ready === 'boolean'){ lobbyReadyMap.set(id, data.ready); }
+  renderLobbyRoster();
+  updateLobbyStageStatus();
+}
+
+function removeLobbyPlayer(id){
+  if(!id) return;
+  lobbyPlayersState.delete(id);
+  lobbyReadyMap.delete(id);
+  lobbyPingState.delete(id);
+  renderLobbyRoster();
+  updateLobbyStageStatus();
+}
+
+function setLobbyHost(id){
+  lobbyHostId = id;
+  syncLobbyOptionUI();
+  renderLobbyRoster();
+}
+
+function updateLobbyStageTitle(name){
+  if(!lobbyStageTitleEl) return;
+  lobbyStageTitleEl.textContent = name || 'Lobby';
+}
+
+function buildLocalLobbyMeta(){
+  return {
+    id: player.id,
+    name: player.name,
+    ready: localReadyState,
+    joinOrder: localJoinOrder,
+    color: customCubeColorHex
+  };
+}
+
+function sendLobbyHandshake(peerId){
+  if(!peerId) return;
+  const meta = {
+    t:'lobby_meta',
+    player: buildLocalLobbyMeta(),
+    options: lobbyGameOptions,
+    host: lobbyHostId,
+    lobbyName: activeLobbyName
+  };
+  sendDirect(peerId, meta);
+  if(isHost && player && player.id && lobbyHostId === player.id){
+    const roster = getLobbyPlayersArray();
+    sendDirect(peerId, { t:'lobby_state', roster, options: lobbyGameOptions, host: lobbyHostId, lobbyName: activeLobbyName });
+  }
+}
+
+function pumpLobbyPings(){
+  if(!isMultiplayerActive()) return;
+  const now = performance.now ? performance.now() : Date.now();
+  if(isHost){
+    let touched = false;
+    for(const id in dataChannels){
+      const ch = dataChannels[id];
+      if(ch && ch.readyState === 'open'){
+        touched = true;
+        sendDirect(id, { t:'lobby_ping', ts: now, id: player.id });
+      }
+    }
+    if(touched){
+      lobbyPingState.set(player.id, 0);
+    }
+    return;
+  }
+  const hostChannel = dataChannels['host'];
+  if(hostChannel && hostChannel.readyState === 'open'){
+    sendDirect('host', { t:'lobby_ping', ts: now, id: player.id });
+  }
+}
+
+function broadcastLobbyMeta(){
+  const payload = { t:'lobby_meta', player: buildLocalLobbyMeta(), options: lobbyGameOptions, host: lobbyHostId, lobbyName: activeLobbyName };
+  sendData(payload);
+}
+
+function broadcastLobbySettings(){
+  const payload = { t:'lobby_settings', options: lobbyGameOptions };
+  sendData(payload);
+}
+
+function broadcastLobbyReady(ready){
+  const payload = { t:'lobby_ready', ready: !!ready };
+  sendData(payload);
+}
+
+function resolveMatchOptions(options){
+  let settings = { ...defaultGameOptions, ...(options || {}) };
+  if(settings.mode === 'random'){
+    const modes = ['classic','deathmatch','pee'];
+    const maps = ['alexland','duel','skyline'];
+    const mode = modes[Math.floor(Math.random()*modes.length)];
+    const map = maps[Math.floor(Math.random()*maps.length)];
+    const friendly = Math.random() < 0.4;
+    settings = { ...settings, mode, map, friendlyFire: friendly };
+  }
+  return settings;
+}
+
+function hostStartMatch(){
+  if(!(player && player.id === lobbyHostId && isHost)) return;
+  const players = getLobbyPlayersArray();
+  const allReady = players.length > 0 && players.every(p=>p.ready);
+  if(!allReady){
+    alert('All players must be ready before starting.');
+    return;
+  }
+  const startOptions = resolveMatchOptions(lobbyGameOptions);
+  const payload = { t:'lobby_start', options: startOptions, lobbyName: activeLobbyName, host: player.id };
+  sendData(payload);
+  startMatchFromOptions(startOptions);
+  setLobbyStageVisible(false);
 }
 
 /* Game Over / Retry */
@@ -3267,6 +4151,7 @@ const btnJoin = document.getElementById('btnJoin');
 const btnHide = document.getElementById('btnHide');
 let peerConnections = {}; // peerId -> RTCPeerConnection
 let dataChannels = {};    // peerId -> DataChannel
+const peerIdToPlayerId = new Map();
 let menuOpen = true;
 let isHost = false;
 let signalingSocket = null;
@@ -3405,10 +4290,7 @@ function initializeMenuUI(){
   function updateNameFromMenu(){
     const raw = (menuPlayerNameInput?.value || '').trim();
     const name = raw || 'Player';
-    nameInput.value = name;
-    player.name = name;
-    savePersistedNetworkSettings({name});
-    updatePlayers();
+    setPlayerDisplayName(name);
   }
 
   if(menuRoomCodeInput){
@@ -3435,8 +4317,10 @@ function initializeMenuUI(){
       updateNameFromMenu();
     } else {
       const fallback = (nameInput.value || player.name || 'Player').trim();
-      player.name = fallback || 'Player';
-      savePersistedNetworkSettings({name: player.name});
+      setPlayerDisplayName(fallback);
+    }
+    if(pauseNameInput && pauseNameInput.value !== player.name){
+      pauseNameInput.value = player.name;
     }
     let joinedRoomCode = '';
     if(menuRoomCodeInput){
@@ -3450,11 +4334,36 @@ function initializeMenuUI(){
       alert('Enter a room code to join a lobby.');
       return;
     }
-    score = 0;
-    gameHasStarted = true;
-    closeMainMenu();
     closePauseMenu();
-    startNextWave(true);
+    closeMainMenu();
+    if(mode === 'solo'){
+      activeGameOptions = { ...defaultGameOptions };
+      lobbyGameOptions = { ...defaultGameOptions };
+      friendlyFireEnabled = false;
+      lobbyPlayersState.clear();
+      lobbyPingState.clear();
+      setLobbyStageVisible(false);
+      startMatchFromOptions(activeGameOptions);
+      return;
+    }
+    localReadyState = false;
+    lobbyReadyMap.set(player.id, false);
+    lobbyPlayersState.clear();
+    lobbyPingState.clear();
+    upsertLobbyPlayer(player.id, { name: player.name, ready: false, joinOrder: localJoinOrder++ });
+    lobbyPingState.set(player.id, 0);
+    if(mode === 'host'){
+      const stagedName = (lobbyNameInput?.value || '').trim();
+      if(stagedName){
+        setActiveLobbyName(stagedName);
+      }
+      setLobbyHost(player.id);
+      peerIdToPlayerId.set('host', player.id);
+    }
+    setLobbyStageVisible(true);
+    const stageLabel = activeLobbyName || joinedRoomCode || roomInput.value || 'Lobby';
+    updateLobbyStageTitle(stageLabel);
+    updateLobbyStageStatus('Waiting for players…');
     if(mode === 'host'){ btnHost?.click(); }
     if(mode === 'join'){ btnJoin?.click(); }
   }
@@ -3574,6 +4483,16 @@ function persistCurrentNetworkForm(){
     el.addEventListener('input', handler);
   }
 });
+
+if(lobbyNameInput){
+  lobbyNameInput.addEventListener('change', ()=>{
+    if(isHost && player && player.id === lobbyHostId){
+      const staged = (lobbyNameInput.value || '').trim();
+      setActiveLobbyName(staged || activeLobbyName);
+      broadcastLobbyMeta();
+    }
+  });
+}
 
 function slugifyRoomName(name){
   if(!name) return '';
@@ -3792,6 +4711,7 @@ function closeAllPeers(reason){
   }
   dataChannels = {};
   peerConnections = {};
+  peerIdToPlayerId.clear();
   const remoteIds = Object.keys(remotePlayers);
   remoteIds.forEach(id=> removeRemote(id));
   if(reason) logNetwork(reason);
@@ -3958,6 +4878,60 @@ btnBrowseLobbies.onclick = ()=>{
 btnRefreshLobbies.onclick = ()=> refreshLobbyList();
 btnCloseLobbyBrowser.onclick = ()=> closeLobbyBrowser();
 btnJoinLobby.onclick = ()=> joinSelectedLobby();
+lobbyModeInputs.forEach(input=>{
+  input.addEventListener('change', ()=>{
+    const isHostClient = player && player.id === lobbyHostId && isHost;
+    if(!isHostClient){
+      syncLobbyOptionUI();
+      return;
+    }
+    updateLobbyOptionsFromUI();
+    broadcastLobbySettings();
+  });
+});
+lobbyMapSelect?.addEventListener('change', ()=>{
+  const isHostClient = player && player.id === lobbyHostId && isHost;
+  if(!isHostClient){
+    syncLobbyOptionUI();
+    return;
+  }
+  updateLobbyOptionsFromUI();
+  broadcastLobbySettings();
+});
+lobbyFriendlyFireInput?.addEventListener('change', ()=>{
+  const isHostClient = player && player.id === lobbyHostId && isHost;
+  if(!isHostClient){
+    syncLobbyOptionUI();
+    return;
+  }
+  updateLobbyOptionsFromUI();
+  broadcastLobbySettings();
+});
+lobbyReadyButton?.addEventListener('click', ()=>{
+  localReadyState = !localReadyState;
+  lobbyReadyMap.set(player.id, localReadyState);
+  upsertLobbyPlayer(player.id, { ready: localReadyState });
+  updateLobbyButtons();
+  broadcastLobbyReady(localReadyState);
+});
+lobbyLeaveButton?.addEventListener('click', ()=>{
+  disconnectFromSignaling('Left lobby');
+  setLobbyStageVisible(false);
+});
+lobbyStartButton?.addEventListener('click', ()=>{
+  if(!(player && player.id === lobbyHostId && isHost)) return;
+  hostStartMatch();
+});
+pauseNameInput?.addEventListener('change', e=>{
+  setPlayerDisplayName(e.target.value, { persist: true });
+  broadcastLobbyMeta();
+});
+pauseColorInput?.addEventListener('change', e=>{
+  const hex = e.target.value || '#01c119';
+  applyCustomCubeColor(hex);
+  writeCookie(COLOR_COOKIE_KEY, hex);
+  broadcastLobbyMeta();
+});
 
 function handleSignalMessage(msg){
   if(msg.type === 'pong'){
@@ -3983,6 +4957,11 @@ function handleSignalMessage(msg){
     logNetwork(`Server error: ${msg.message}`);
     btnDisconnect.disabled = false;
     return;
+  }
+  if(msg.type === 'host-transfer'){
+    if(processHostTransferMessage({ ...msg, t:'host_transfer' })){
+      return;
+    }
   }
   if(msg.type === 'join-request' && isHost){
     logNetwork(`Join request from ${msg.name || msg.peerId}`);
@@ -4085,11 +5064,17 @@ function makePeer(peerId, remotePlayerId){
 /* set up datachannel handlers */
 function setupDataChannel(peerId, ch, displayName, remotePlayerId){
   dataChannels[peerId] = ch;
+  if(remotePlayerId){
+    peerIdToPlayerId.set(peerId, remotePlayerId);
+  }
   if(displayName){
     if(!remotePlayers[peerId]) remotePlayers[peerId] = {id: remotePlayerId || peerId, pos:new THREE.Vector3(), yaw:0, pitch:0, name:displayName};
     updatePlayers();
   }
-  ch.onopen = ()=>{ logNetwork(`Data channel open: ${peerId}`); };
+  ch.onopen = ()=>{
+    logNetwork(`Data channel open: ${peerId}`);
+    try{ sendLobbyHandshake(peerId); }catch(e){}
+  };
   ch.onmessage = ev=>{
     try{
       const msg = JSON.parse(ev.data);
@@ -4100,6 +5085,11 @@ function setupDataChannel(peerId, ch, displayName, remotePlayerId){
     logNetwork(`Data channel closed: ${peerId}`);
     delete dataChannels[peerId];
     delete peerConnections[peerId];
+    const mappedId = peerIdToPlayerId.get(peerId);
+    if(mappedId){
+      removeLobbyPlayer(mappedId);
+      peerIdToPlayerId.delete(peerId);
+    }
     removeRemote(peerId);
     if(isHost){
       broadcast({t:'peer_left', from:peerId}, peerId);
@@ -4123,6 +5113,14 @@ function broadcast(obj, skipId){
   sendData(obj, skipId);
 }
 
+function sendDirect(peerId, obj){
+  const ch = dataChannels[peerId];
+  if(ch && ch.readyState === 'open'){
+    try{ ch.send(JSON.stringify(obj)); }
+    catch(e){}
+  }
+}
+
 function removeRemote(remoteId){
   const rp = remotePlayers[remoteId];
   if(!rp) return;
@@ -4132,6 +5130,57 @@ function removeRemote(remoteId){
 }
 
 /* handle incoming messages from peers */
+function processHostTransferMessage(msg){
+  if(!msg) return false;
+  const type = msg.t || msg.type;
+  if(type !== 'host_transfer' && type !== 'host-transfer'){
+    return false;
+  }
+  const hostPlayerId = msg.playerId || msg.hostPlayerId || msg.host || null;
+  if(hostPlayerId){
+    upsertLobbyPlayer(hostPlayerId, { name: msg.name || hostPlayerId });
+    setLobbyHost(hostPlayerId);
+    peerIdToPlayerId.set('host', hostPlayerId);
+  }
+  if(msg.lobbyName){
+    setActiveLobbyName(msg.lobbyName);
+  } else if(msg.meta && msg.meta.name){
+    setActiveLobbyName(msg.meta.name);
+  }
+  if(msg.becomeHost || msg.promote){
+    logNetwork('Promoted to host role.');
+    isHost = true;
+    localPeerId = 'host';
+    lobbyHostId = player.id;
+    setLobbyHost(player.id);
+    peerIdToPlayerId.set('host', player.id);
+    lobbyPingState.set(player.id, 0);
+    closeAllPeers('Reconfiguring as new host');
+    peerIdToPlayerId.set('host', player.id);
+    if(msg.options){
+      lobbyGameOptions = { ...lobbyGameOptions, ...msg.options };
+    }
+    syncLobbyOptionUI();
+    updateLobbyButtons();
+    broadcastLobbyMeta();
+  } else {
+    logNetwork('Host migrated to another player.');
+    if(msg.options){
+      lobbyGameOptions = { ...lobbyGameOptions, ...msg.options };
+    }
+    if(isHost){
+      isHost = false;
+    }
+    closeAllPeers('Host migrated, awaiting reconnection');
+    if(hostPlayerId){
+      peerIdToPlayerId.set('host', hostPlayerId);
+    }
+    syncLobbyOptionUI();
+    updateLobbyButtons();
+  }
+  return true;
+}
+
 function handleRemoteMessage(peerId, msg){
   const sourceId = (peerId === 'host' && msg.from) ? msg.from : peerId;
 
@@ -4140,7 +5189,120 @@ function handleRemoteMessage(peerId, msg){
     broadcast(forward, peerId);
   }
 
+  if(msg && msg.t === 'host_transfer'){
+    if(processHostTransferMessage(msg)){
+      return;
+    }
+  }
+
+  if(msg.t === 'lobby_meta'){
+    const p = msg.player || {};
+    const id = p.id || sourceId;
+    upsertLobbyPlayer(id, { name: p.name || id, ready: !!p.ready, joinOrder: p.joinOrder ?? Date.now(), color: p.color });
+    if(peerId && p.id){ peerIdToPlayerId.set(peerId, p.id); }
+    if(msg.host){
+      setLobbyHost(msg.host);
+      peerIdToPlayerId.set('host', msg.host);
+    }
+    if(msg.lobbyName){
+      setActiveLobbyName(msg.lobbyName);
+      updateLobbyStageTitle(msg.lobbyName);
+    }
+    if(msg.options){
+      lobbyGameOptions = { ...lobbyGameOptions, ...msg.options };
+      syncLobbyOptionUI();
+    }
+    if(isHost){
+      const roster = getLobbyPlayersArray();
+      sendDirect(peerId, { t:'lobby_state', roster, options: lobbyGameOptions, host: lobbyHostId, lobbyName: activeLobbyName });
+    }
+    return;
+  }
+
+  if(msg.t === 'lobby_settings'){
+    if(!isHost){
+      lobbyGameOptions = { ...lobbyGameOptions, ...(msg.options || {}) };
+      syncLobbyOptionUI();
+    }
+    return;
+  }
+
+  if(msg.t === 'lobby_ready'){
+    const ready = !!msg.ready;
+    lobbyReadyMap.set(sourceId, ready);
+    upsertLobbyPlayer(sourceId, { ready });
+    if(isHost){
+      const roster = getLobbyPlayersArray();
+      sendData({ t:'lobby_state', roster, options: lobbyGameOptions, host: lobbyHostId, lobbyName: activeLobbyName });
+    }
+    return;
+  }
+
+  if(msg.t === 'lobby_state'){
+    lobbyPlayersState.clear();
+    lobbyReadyMap.clear();
+    lobbyPingState.clear();
+    const roster = Array.isArray(msg.roster) ? msg.roster : [];
+    roster.forEach((entry, idx)=>{
+      const id = entry.id || entry.peerId || `peer-${idx}`;
+      upsertLobbyPlayer(id, { name: entry.name || id, ready: !!entry.ready, joinOrder: entry.joinOrder ?? (idx + 1), color: entry.color });
+      lobbyReadyMap.set(id, !!entry.ready);
+    });
+    if(msg.options){
+      lobbyGameOptions = { ...lobbyGameOptions, ...msg.options };
+      syncLobbyOptionUI();
+    }
+    if(msg.host){ setLobbyHost(msg.host); }
+    if(msg.lobbyName){
+      setActiveLobbyName(msg.lobbyName);
+      updateLobbyStageTitle(msg.lobbyName);
+    }
+    updateLobbyButtons();
+    return;
+  }
+
+  if(msg.t === 'lobby_start'){
+    if(msg.host){ setLobbyHost(msg.host); }
+    if(msg.lobbyName){
+      setActiveLobbyName(msg.lobbyName);
+      updateLobbyStageTitle(msg.lobbyName);
+    }
+    if(msg.options){
+      lobbyGameOptions = { ...msg.options };
+      startMatchFromOptions(msg.options);
+    }
+    setLobbyStageVisible(false);
+    return;
+  }
+
+  if(msg.t === 'lobby_ping'){
+    if(typeof msg.ts === 'number'){
+      const response = { t:'lobby_pong', ts: msg.ts, id: msg.id || sourceId };
+      if(peerId === 'host'){
+        sendDirect('host', response);
+      } else {
+        sendDirect(peerId, response);
+      }
+    }
+    return;
+  }
+
+  if(msg.t === 'lobby_pong'){
+    if(typeof msg.ts === 'number'){
+      const latency = Math.round(Math.max(1, performance.now() - msg.ts));
+      const id = msg.id || sourceId;
+      lobbyPingState.set(id, latency);
+      renderLobbyRoster();
+    }
+    return;
+  }
+
   if(msg.t === 'peer_left'){
+    const mappedId = peerIdToPlayerId.get(sourceId);
+    if(mappedId){
+      removeLobbyPlayer(mappedId);
+      peerIdToPlayerId.delete(sourceId);
+    }
     removeRemote(sourceId);
     return;
   }
@@ -4164,6 +5326,13 @@ function handleRemoteMessage(peerId, msg){
     scheduleParryReturn(cfg, ownerId, {dir: cfg.dir});
     return;
   }
+  if(msg.t === 'enemy_shoot'){
+    if(msg.shot){
+      spawnBulletFromShot(msg.shot, msg.enemyId || 'enemy');
+    }
+    return;
+  }
+
   if(msg.t === 'shoot'){
     if(Array.isArray(msg.shots)){
       msg.shots.forEach(shot=> spawnBulletFromShot(shot, sourceId));
@@ -4459,7 +5628,14 @@ function updateBullets(dt){
       }
     }
 
-    if(!removed && data.owner !== player.id && player.alive){
+    if(!removed && player.alive){
+      const ownerIsPlayer = isPlayerShotOwner(data.owner);
+      if(ownerIsPlayer && (!friendlyFireEnabled || data.owner === player.id)){
+        continue;
+      }
+      if(data.owner === player.id){
+        continue;
+      }
       const playerHeight = player.pos.clone().add(new THREE.Vector3(0,0.6,0));
       const distToPlayer = b.position.distanceTo(playerHeight);
       const threshold = (data.hitRadius ?? 0.45) + player.radius * 0.4;
@@ -4630,6 +5806,19 @@ function gameTick(now){
   const worldDt = freezeWorld ? 0 : dt;
   const playerDt = playerFrozen ? 0 : dt;
   shootState.cooldown = Math.max(0, shootState.cooldown - rawDt);
+  if(weaponState.recharging){
+    weaponState.rechargeTimer = Math.max(0, weaponState.rechargeTimer - rawDt);
+    if(weaponState.rechargeTimer <= 0){
+      weaponState.recharging = false;
+      weaponState.charge = 1;
+      weaponState.rechargeTimer = 0;
+      weaponState.rechargeDuration = 0;
+      weaponState.label = '';
+      if(armRig && typeof armRig.endRecharge === 'function'){
+        armRig.endRecharge();
+      }
+    }
+  }
 
   if(!menuOpen){
     if(gameHasStarted && waveState.active && player.alive){
@@ -4654,6 +5843,12 @@ function gameTick(now){
 
   if(armRig){
     armRig.update(dt);
+  }
+
+  lobbyPingTimer += rawDt * 1000;
+  if(lobbyPingTimer >= LOBBY_PING_INTERVAL){
+    lobbyPingTimer = 0;
+    pumpLobbyPings();
   }
 
   updateHUD();
