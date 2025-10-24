@@ -44,12 +44,58 @@ function cleanupConnection(ws){
   if(meta.role === 'host'){
     room.host = null;
     room.hostInfo = null;
-    room.clients.forEach((client)=>{
-      send(client.socket, { type: 'peer-left', peerId: 'host' });
-      try{ client.socket.close(); }catch(e){}
-    });
-    room.clients.clear();
-    room.meta = { name: room.code, capacity: room.meta?.capacity || 10 };
+    const clientEntries = Array.from(room.clients.entries());
+    if(clientEntries.length === 0){
+      room.meta = { name: room.code, capacity: room.meta?.capacity || 10 };
+    } else {
+      clientEntries.sort((a, b)=>{
+        const aOrder = a[1].joinOrder ?? Number.MAX_SAFE_INTEGER;
+        const bOrder = b[1].joinOrder ?? Number.MAX_SAFE_INTEGER;
+        if(aOrder !== bOrder) return aOrder - bOrder;
+        return a[0].localeCompare(b[0]);
+      });
+      const [nextId, nextClient] = clientEntries.shift();
+      room.clients.delete(nextId);
+      room.host = nextClient.socket;
+      room.hostInfo = { name: nextClient.name || 'Host', playerId: nextClient.playerId || 'host' };
+      if(room.host){
+        room.host.meta = {
+          room: meta.room,
+          role: 'host',
+          peerId: 'host',
+          name: room.hostInfo.name,
+          playerId: room.hostInfo.playerId,
+          joinOrder: nextClient.joinOrder
+        };
+        send(room.host, {
+          type: 'host-transfer',
+          becomeHost: true,
+          playerId: room.hostInfo.playerId,
+          name: room.hostInfo.name,
+          lobbyName: room.meta?.name,
+          options: room.meta?.options || null,
+          meta: room.meta
+        });
+        clientEntries.forEach(([peerId, client])=>{
+          send(client.socket, {
+            type: 'host-transfer',
+            playerId: room.hostInfo.playerId,
+            name: room.hostInfo.name,
+            lobbyName: room.meta?.name,
+            options: room.meta?.options || null
+          });
+          if(room.host){
+            send(room.host, {
+              type: 'join-request',
+              peerId,
+              name: client.name,
+              playerId: client.playerId
+            });
+          }
+        });
+      }
+      return;
+    }
   } else if(meta.role === 'join'){
     room.clients.delete(meta.peerId);
     if(room.host){
@@ -171,15 +217,17 @@ wss.on('connection', ws=>{
         return;
       }
 
-      const peerId = `peer-${room.counter++}`;
+      const joinOrder = room.counter++;
+      const peerId = `peer-${joinOrder}`;
       ws.meta = {
         room: roomCode,
         role:'join',
         peerId,
         name: msg.name || peerId,
-        playerId: msg.playerId || peerId
+        playerId: msg.playerId || peerId,
+        joinOrder
       };
-      room.clients.set(peerId, { socket: ws, name: ws.meta.name, playerId: ws.meta.playerId });
+      room.clients.set(peerId, { socket: ws, name: ws.meta.name, playerId: ws.meta.playerId, joinOrder });
       send(ws, { type:'welcome', id: peerId, meta: room.meta });
       send(room.host, { type:'join-request', peerId, name: ws.meta.name, playerId: ws.meta.playerId });
       return;
