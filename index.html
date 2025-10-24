@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>3D Shooter — LAN P2P (manual SDP)</title>
+<title>A day in the life of alex14534</title>
 <style>
   :root{--bg:#000;--ui-bg:rgba(0,0,0,0.35);--btn:#222}
   html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial}
@@ -455,6 +455,7 @@ const staticColliders = [];
 let activeMapKey = 'alexland';
 let activeLobbyName = 'Alexland';
 let populationSignUpdater = ()=>{};
+let remotePlayers = {}; // peerId -> state
 
 function createAlexlandMap(){
   const group = new THREE.Group();
@@ -987,7 +988,6 @@ const btnPauseMenu = document.getElementById('btnPauseMenu');
 const pauseNameInput = document.getElementById('pauseNameInput');
 const pauseColorInput = document.getElementById('pauseColorInput');
 const parryFlashEl = document.getElementById('parryFlash');
-let remotePlayers = {}; // peerId -> state
 const defaultGameOptions = Object.freeze({ mode:'classic', map:'alexland', friendlyFire:false });
 let lobbyGameOptions = { ...defaultGameOptions };
 let activeGameOptions = { ...defaultGameOptions };
