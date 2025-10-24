@@ -455,6 +455,7 @@ const staticColliders = [];
 let activeMapKey = 'alexland';
 let activeLobbyName = 'Alexland';
 let populationSignUpdater = ()=>{};
+let remotePlayers = {}; // peerId -> state
 
 function createAlexlandMap(){
   const group = new THREE.Group();
@@ -987,7 +988,6 @@ const btnPauseMenu = document.getElementById('btnPauseMenu');
 const pauseNameInput = document.getElementById('pauseNameInput');
 const pauseColorInput = document.getElementById('pauseColorInput');
 const parryFlashEl = document.getElementById('parryFlash');
-let remotePlayers = {}; // peerId -> state
 const defaultGameOptions = Object.freeze({ mode:'classic', map:'alexland', friendlyFire:false });
 let lobbyGameOptions = { ...defaultGameOptions };
 let activeGameOptions = { ...defaultGameOptions };
